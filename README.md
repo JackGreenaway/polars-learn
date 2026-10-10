@@ -189,11 +189,11 @@ Library requirements use minimum versions without speculative upper bounds. Add 
 
 ### Releases
 
-GitHub Actions follows the same release setup as Conformity. Configure the repository or `pypi` environment secret `PYPI_API_TOKEN` with a PyPI upload token for `polars-learn`. The publishing job uses the `pypi` environment. No API token belongs in this repository.
+Configure the repository or `pypi` environment secret `PYPI_API_TOKEN` with a PyPI upload token for `polars-learn`. The publishing job uses the `pypi` environment.
 
-Update `project.version` in `pyproject.toml` and `__version__` in `src/polars_learn/__init__.py`, run `uv lock`, and push the changes. Then run **Create GitHub Release** from the Actions tab. It checks tests, linting, formatting, and types; rejects an existing `vX.Y.Z` tag; builds and validates distributions; creates a GitHub release with those files; and passes the same artifacts directly to **Upload Python Package** for PyPI publishing. The reusable workflow call is necessary because a release created with GitHub's workflow token does not trigger another release workflow.
+Update `project.version` in `pyproject.toml` and `__version__` in `src/polars_learn/__init__.py`, run `uv lock`, and push the changes. Publish a GitHub release from the GitHub Releases page to trigger **Upload Python Package**. It builds distributions, transfers them to a separate publishing job, and uploads them to PyPI.
 
-Alternatively, publish a GitHub release tagged `vX.Y.Z` matching `project.version`. **Upload Python Package** checks the package, builds distributions, and publishes them automatically. Pushes and pull requests run **Tests** on Python 3.11 and 3.12, both with and without the pandas extra. Creating or publishing a release uploads that version to PyPI; ordinary pushes do not publish packages.
+**Create GitHub Release** remains available to create a release with validated distributions. Releases created by that workflow with GitHub's workflow token do not trigger **Upload Python Package**; use the GitHub Releases page for the publishing flow.
 
 ## License
 
