@@ -1,0 +1,99 @@
+name: Create GitHub Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: create-release
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install Python
+        run: uv python install 3.11
+      - name: Install locked dependencies
+        run: uv sync --locked --extra pandas --python 3.11
+      - name: Validate package
+        run: |
+          uv run --locked --extra pandas pytest --doctest-modules src tests
+          uv run --locked --extra pandas ruff check .
+          uv run --locked --extra pandas ruff format --check .
+          uv run --locked --extra pandas pyright
+      - name: Read package version
+        id: version
+        run: |
+          uv run --locked --extra pandas python - <<'PY'
+          import os
+          import re
+          import tomllib
+
+          with open("pyproject.toml", "rb") as source:
+              version = tomllib.load(source)["project"]["version"]
+          from polars_learn import __version__
+
+          if __version__ != version:
+              raise SystemExit("Package __version__ must match project.version")
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+              raise SystemExit("Release version must have the form X.Y.Z")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"tag=v{version}\n")
+          PY
+      - name: Reject an existing release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" > /tmp/release-refs.json
+          uv run --locked --extra pandas python - <<'PY'
+          import json
+          import tomllib
+
+          with open("pyproject.toml", "rb") as source:
+              tag = "v" + tomllib.load(source)["project"]["version"]
+          with open("/tmp/release-refs.json") as source:
+              refs = json.load(source)
+          if any(ref["ref"] == f"refs/tags/{tag}" for ref in refs):
+              raise SystemExit(f"{tag} already exists; bump project.version before releasing")
+          PY
+      - name: Build and validate wheel and source archive
+        run: |
+          uv build
+          uvx twine check --strict dist/*
+      - name: Save distributions for PyPI publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: created-release-dists
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+      - name: Create release with distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" \
+            --generate-notes
+
+  publish:
+    needs: create-release
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/python-publish.yml
+    with:
+      artifact-name: created-release-dists
+    secrets: inherit

@@ -1,0 +1,44 @@
+[project]
+name = "polars-learn"
+version = "0.1.0"
+description = "Native Polars feature engineering and schema validation for scikit-learn"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Jack"}]
+dependencies = ["polars>=1.20", "scikit-learn>=1.6", "numpy>=1.24"]
+
+[project.optional-dependencies]
+pandas = ["pandas>=2", "pyarrow>=14"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.9", "pyright[nodejs]>=1.1.390"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/polars_learn"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+# scikit-learn does not ship complete type stubs.
+reportMissingTypeStubs = false
+# Runtime validation also protects callers that do not use a type checker.
+reportUnnecessaryIsInstance = false
+venvPath = "."
+venv = ".venv"

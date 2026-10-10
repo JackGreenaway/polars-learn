@@ -1,0 +1,34 @@
+name: Tests
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+        pandas: [false, true]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install locked core dependencies
+        if: '!matrix.pandas'
+        run: uv sync --locked --python ${{ matrix.python-version }}
+      - name: Install locked pandas dependencies
+        if: matrix.pandas
+        run: uv sync --locked --extra pandas --python ${{ matrix.python-version }}
+      - name: Test
+        run: uv run --locked pytest --doctest-modules src tests
+      - name: Lint
+        run: uv run --locked ruff check .
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+      - name: Check types
+        run: uv run --locked pyright
