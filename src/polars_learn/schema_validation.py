@@ -4,11 +4,130 @@ from typing import Self
 
 import numpy as np
 import polars as pl
-from sklearn.utils.validation import check_is_fitted  # pyright: ignore[reportUnknownVariableType]
+from sklearn.utils.validation import (
+    check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
+)
 
 from ._utils import NativeTransformer, to_polars
 from .exceptions import SchemaValidationError
 from .types import ExtraColumnPolicy, Schema, ValidationMode
+
+
+class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
+    """Describe a fixed input contract and validate DataFrames against it.
+
+    Parameters
+    ----------
+    schema : dict of str to polars.DataType
+        Required input column names and dtypes in order.
+    allow_extra_columns : bool, default=False
+        Whether additional, non-required columns are accepted.
+    enforce_column_order : bool, default=True
+        Require the fitted required column order to match the input exactly.
+    extra_columns : {"preserve", "drop"}, default="preserve"
+        If extra columns are permitted, whether to keep or drop them in output.
+    convert_pandas : bool, default=False
+        Allow pandas DataFrames and convert them to Polars. Requires pandas;
+        some dtypes also require PyArrow.
+    warn_on_conversion : bool, default=True
+        Emit ``PandasConversionWarning`` when converting pandas input.
+    """
+
+    def __init__(
+        self,
+        schema: Schema,
+        *,
+        allow_extra_columns: bool = False,
+        enforce_column_order: bool = True,
+        extra_columns: ExtraColumnPolicy = "preserve",
+        convert_pandas: bool = False,
+        warn_on_conversion: bool = True,
+    ) -> None:
+        if not isinstance(schema, dict) or not schema:
+            raise ValueError(
+                "schema must be a nonempty dict of column names to dtypes."
+            )
+        if any(not isinstance(column, str) or not column for column in schema):
+            raise TypeError("schema keys must be nonempty strings.")
+        for dtype in schema.values():
+            valid = isinstance(dtype, pl.DataType) or (
+                isinstance(dtype, type) and issubclass(dtype, pl.DataType)
+            )
+            if not valid:
+                raise TypeError("schema values must be Polars dtypes.")
+        if extra_columns not in ("preserve", "drop"):
+            raise ValueError("extra_columns must be 'preserve' or 'drop'.")
+        self.schema = schema
+        self.allow_extra_columns = allow_extra_columns
+        self.enforce_column_order = enforce_column_order
+        self.extra_columns = extra_columns
+        self.convert_pandas = convert_pandas
+        self.warn_on_conversion = warn_on_conversion
+
+    def _input(self, X: object) -> pl.DataFrame:
+        return to_polars(
+            X,
+            convert_pandas=self.convert_pandas,
+            warn_on_conversion=self.warn_on_conversion,
+        )
+
+    def fit(self, X: object, y: object = None) -> Self:
+        frame = self._input(X)
+        self._validate(frame)
+        self.schema_ = dict(self.schema)
+        self.feature_names_in_ = np.asarray(frame.columns, dtype=object)
+        self.n_features_in_ = frame.width
+        self.output_features_ = np.asarray(list(self.schema_), dtype=object)
+        return self
+
+    def fit_transform(
+        self, X: object, y: object = None, **fit_params: object
+    ) -> pl.DataFrame:
+        if fit_params:
+            raise TypeError(
+                f"Additional fit parameters are unsupported: {sorted(fit_params)}."
+            )
+        return self.fit(X, y).transform(X)
+
+    def _validate(self, frame: pl.DataFrame) -> pl.DataFrame:
+        expected_names = list(self.schema)
+        missing = [column for column in expected_names if column not in frame.columns]
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}.")
+        extras = [column for column in frame.columns if column not in self.schema]
+        if extras and not self.allow_extra_columns:
+            raise ValueError(f"Unexpected columns: {extras}.")
+        present = [column for column in frame.columns if column in self.schema]
+        if self.enforce_column_order and present != expected_names:
+            raise ValueError(
+                f"Column order differs. Expected {expected_names}, received {present}."
+            )
+        for column, expected_dtype in self.schema.items():
+            if column not in frame.columns:
+                continue
+            got = frame[column].dtype
+            if got != expected_dtype:
+                raise ValueError(
+                    f"Column {column!r} has dtype {got}, expected {expected_dtype}."
+                )
+        if self.extra_columns == "drop":
+            return frame.select(expected_names)
+        if self.allow_extra_columns:
+            ordered = expected_names + extras
+            return frame.select(ordered)
+        return frame.select(expected_names)
+
+    def transform(self, X: object) -> pl.DataFrame:
+        check_is_fitted(self, "schema_")
+        frame = self._input(X)
+        result = self._validate(frame)
+        if list(result.columns) != self.output_features_.tolist():
+            raise ValueError(
+                "Output columns differ from the fitted schema. "
+                f"Expected {self.output_features_.tolist()}, received {result.columns}."
+            )
+        return result
+
 
 _INTEGER_RANGES: dict[pl.DataType | type[pl.DataType], tuple[int, int]] = {
     pl.Int8: (-(2**7), 2**7 - 1),

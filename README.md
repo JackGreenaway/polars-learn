@@ -5,6 +5,7 @@ High-performance feature engineering for scikit-learn, powered by Polars.
 ## Features
 
 - Composable native Polars expressions, evaluated in dependency order.
+- Declarative schema contracts and column selection for reusable data preparation.
 - Learned schemas with strict, semi-strict, and permissive validation.
 - scikit-learn estimators with cloning, parameters, and feature names.
 - Native Polars output and optional, explicit pandas conversion.
@@ -24,9 +25,24 @@ uv pip install '.[pandas]'
 
 ```python
 import polars as pl
-from polars_learn import FeatureEngineer, FeatureSpec, SchemaValidator
+from polars_learn import (
+    ColumnSelector,
+    FeatureEngineer,
+    FeatureSpec,
+    SchemaSpec,
+    SchemaValidator,
+)
 
 X = pl.DataFrame({"price": [10.0, 20.0, 30.0], "quantity": [2, 3, 4]})
+
+schema = SchemaSpec({"price": pl.Float64, "quantity": pl.Int64})
+validated = schema.fit_transform(X)
+
+selector = ColumnSelector(["quantity", "price"], rename={"quantity": "qty"})
+selected = selector.fit_transform(validated)
+print(selected.columns)
+# ['qty', 'price']
+
 validator = SchemaValidator(mode="strict").fit(X)
 validated = validator.transform(X)
 
@@ -66,6 +82,23 @@ print(FeatureEngineer([spec]).fit_transform(quotes))
 Expressions within one specification are evaluated together and cannot reference new columns created by siblings. Separate specifications execute sequentially; later ones can use earlier outputs. Drops happen after each specification. Missing expression inputs, missing drop columns, and duplicate output names raise `FeatureEngineeringError` (duplicate names detectable at construction raise `ValueError`). Overwriting existing columns is allowed and keeps Polars' column position. For example, `FeatureSpec(pl.col("price") + 1)` replaces `price`.
 
 `fit` executes the training transformation to validate expressions and learn output names and dtypes. `transform` requires the fitted input column names and order and the exact fitted output schema. Input dtype differences are acceptable only when the resulting schema remains identical; use `SchemaValidator` first for explicit input type policies. Empty feature lists are identity transforms. The public API accepts eager DataFrames; internally, lazy stages preserve sequential semantics and collect once per execution. Expressions are stateless; training transformations do not learn statistics. Use deterministic expressions to keep training and inference consistent.
+
+## Schema Contracts and Column Selection
+
+`SchemaSpec` is a lightweight, declarative contract for required columns and dtypes. It validates DataFrames without needing a fitted estimator state and is useful when you want a reusable schema assertion in training or validation code.
+
+```python
+schema = SchemaSpec({"price": pl.Float64, "quantity": pl.Int64})
+print(schema.fit_transform(X).schema)
+```
+
+`ColumnSelector` keeps or reorders a chosen subset of columns, optionally renaming them to a final output schema. It suits preprocessing steps such as separating feature blocks, keeping a fixed input order for downstream estimators, or producing a tidy column set before feature engineering.
+
+```python
+selector = ColumnSelector(["quantity", "price"], rename={"quantity": "qty"})
+print(selector.fit_transform(X).columns)
+# ['qty', 'price']
+```
 
 ## Schema Validation
 

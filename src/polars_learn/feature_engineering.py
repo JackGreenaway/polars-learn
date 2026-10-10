@@ -5,7 +5,9 @@ from typing import Self
 
 import numpy as np
 import polars as pl
-from sklearn.utils.validation import check_is_fitted  # pyright: ignore[reportUnknownVariableType]
+from sklearn.utils.validation import (
+    check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
+)
 
 from ._utils import NativeTransformer, to_polars
 from .exceptions import FeatureEngineeringError

@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from polars_learn import FeatureEngineer, FeatureSpec
+from polars_learn import ColumnSelector, FeatureEngineer, FeatureSpec, SchemaSpec
 
 
 def test_canonical_expressions_and_native_names(frame):
@@ -56,3 +56,23 @@ def test_selector_expansion(frame):
         "price_copy",
         "quantity_copy",
     ]
+
+
+def test_schema_spec_validates_required_columns_and_dtypes(frame):
+    schema = SchemaSpec({"price": pl.Float64, "quantity": pl.Int64})
+    validated = schema.fit_transform(frame)
+    assert validated.columns == ["price", "quantity"]
+    assert dict(validated.schema) == {"price": pl.Float64, "quantity": pl.Int64}
+
+    with pytest.raises(ValueError):
+        SchemaSpec({"price": pl.Int64}).transform(pl.DataFrame({"quantity": [1, 2]}))
+
+
+def test_column_selector_reorders_and_renames(frame):
+    selector = ColumnSelector(["quantity", "price"], rename={"quantity": "qty"})
+    result = selector.fit_transform(frame)
+    assert result.columns == ["qty", "price"]
+    assert result["qty"].to_list() == [2, 3, 4, 5]
+
+    with pytest.raises(ValueError):
+        ColumnSelector(["missing"]).fit_transform(frame)

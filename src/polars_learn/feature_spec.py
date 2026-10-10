@@ -2,7 +2,121 @@
 
 from collections.abc import Sequence
 
+import numpy as np
 import polars as pl
+from sklearn.utils.validation import (
+    check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
+)
+
+from ._utils import NativeTransformer, to_polars
+
+
+class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
+    """Select and optionally rename columns in a native Polars DataFrame.
+
+    Parameters
+    ----------
+    columns : sequence of str
+        Ordered sequence of input column names to keep.
+    rename : dict of str to str, default=None
+        Optional mapping from source names to new output names. Renamed output
+        names must remain unique.
+    convert_pandas : bool, default=False
+        Allow pandas DataFrames and convert them to Polars. Requires pandas;
+        some dtypes also require PyArrow.
+    warn_on_conversion : bool, default=True
+        Emit ``PandasConversionWarning`` when converting pandas input.
+    """
+
+    def __init__(
+        self,
+        columns: Sequence[str],
+        *,
+        rename: dict[str, str] | None = None,
+        convert_pandas: bool = False,
+        warn_on_conversion: bool = True,
+    ) -> None:
+        self.columns = columns
+        self.rename = rename
+        self.convert_pandas = convert_pandas
+        self.warn_on_conversion = warn_on_conversion
+
+    def _input(self, X: object) -> pl.DataFrame:
+        return to_polars(
+            X,
+            convert_pandas=self.convert_pandas,
+            warn_on_conversion=self.warn_on_conversion,
+        )
+
+    def _validate_columns(self) -> tuple[str, ...]:
+        if isinstance(self.columns, str) or not isinstance(self.columns, Sequence):
+            raise TypeError("columns must be a sequence of nonempty column names.")
+        columns = tuple(self.columns)
+        if not columns or any(
+            not isinstance(column, str) or not column for column in columns
+        ):
+            raise TypeError("columns must be a sequence of nonempty column names.")
+        if self.rename is not None:
+            if not isinstance(self.rename, dict):
+                raise TypeError(
+                    "rename must be a dict mapping source names to output names."
+                )
+            invalid = [
+                (source, target)
+                for source, target in self.rename.items()
+                if not isinstance(source, str)
+                or not source
+                or not isinstance(target, str)
+                or not target
+            ]
+            if invalid:
+                raise TypeError("rename keys and values must be nonempty strings.")
+            if len(set(self.rename.values())) != len(self.rename):
+                raise ValueError("rename output names must be unique.")
+            missing = [source for source in self.rename if source not in columns]
+            if missing:
+                raise ValueError(f"rename contains unknown columns: {missing}.")
+        return columns
+
+    def fit(self, X: object, y: object = None) -> "ColumnSelector":
+        frame = self._input(X)
+        selected = tuple(self._validate_columns())
+        missing = [column for column in selected if column not in frame.columns]
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}.")
+        result = frame.select(selected)
+        if self.rename is not None:
+            result = result.rename(self.rename)
+        self.feature_names_in_ = np.asarray(frame.columns, dtype=object)
+        self.n_features_in_ = frame.width
+        self.output_features_ = np.asarray(result.columns, dtype=object)
+        self.columns_ = selected
+        return self
+
+    def fit_transform(
+        self, X: object, y: object = None, **fit_params: object
+    ) -> pl.DataFrame:
+        if fit_params:
+            raise TypeError(
+                f"Additional fit parameters are unsupported: {sorted(fit_params)}."
+            )
+        return self.fit(X, y).transform(X)
+
+    def transform(self, X: object) -> pl.DataFrame:
+        check_is_fitted(self, "output_features_")
+        frame = self._input(X)
+        missing = [column for column in self.columns_ if column not in frame.columns]
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}.")
+        result = frame.select(self.columns_)
+        if self.rename is not None:
+            result = result.rename(self.rename)
+        if list(result.columns) != self.output_features_.tolist():
+            raise ValueError(
+                "Output columns differ from the fitted selector state. "
+                f"Expected {self.output_features_.tolist()}, received {result.columns}."
+            )
+        return result
 
 
 class FeatureSpec:

@@ -8,7 +8,9 @@ import numpy as np
 import polars as pl
 from numpy.typing import NDArray
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils.validation import check_is_fitted  # pyright: ignore[reportUnknownVariableType]
+from sklearn.utils.validation import (
+    check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
+)
 
 from .exceptions import PandasConversionWarning
 from .types import FeatureNames, OutputMode
