@@ -124,10 +124,12 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     [20.0]
     >>> engineer.get_feature_names_out().tolist()
     ['price', 'quantity', 'notional']
-    >>> configured = FeatureEngineer({
-    ...     "expression": pl.col("price") * pl.col("quantity"),
-    ...     "alias": "notional",
-    ... })
+    >>> configured = FeatureEngineer(
+    ...     {
+    ...         "expression": pl.col("price") * pl.col("quantity"),
+    ...         "alias": "notional",
+    ...     }
+    ... )
     >>> configured.fit_transform(X)["notional"].to_list()
     [20.0]
     """

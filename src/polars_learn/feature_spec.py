@@ -391,9 +391,7 @@ class FeatureSpec:
     --------
     >>> import polars as pl
     >>> from polars_learn import FeatureSpec
-    >>> spec = FeatureSpec(
-    ...     pl.col("price") * pl.col("quantity"), alias="notional"
-    ... )
+    >>> spec = FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")
     >>> spec.expression[0].meta.output_name()
     'notional'
     """

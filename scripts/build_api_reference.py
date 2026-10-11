@@ -4,6 +4,8 @@ import argparse
 import html
 import inspect
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import polars_learn
@@ -97,7 +99,24 @@ def render_doc(doc, level):
     sections = re.split(r"\n([A-Za-z ]+)\n-{3,}\n", inspect.cleandoc(doc))
     output = [sections[0].replace("``", "`").strip() + "\n"]
     for heading, body in zip(sections[1::2], sections[2::2], strict=True):
-        if heading in {"Examples", "See Also"}:
+        if heading == "Examples":
+            output.append(f"{'#' * level} Examples\n\n```pycon\n{body.strip()}\n```\n")
+            continue
+        if heading == "See Also":
+            output.append(f"{'#' * level} See also\n")
+            for line in body.strip().splitlines():
+                if line and not line.startswith(" "):
+                    names, _, description = line.partition(" : ")
+                    links = []
+                    for name in names.split(", "):
+                        slug = CLASSES.get(name)
+                        links.append(f"[{name}]({slug}.md)" if slug else f"`{name}`")
+                    output.append(
+                        " · ".join(links) + (": " + description if description else "")
+                    )
+                else:
+                    output.append(line.strip())
+            output.append("")
             continue
         output.append(f"{'#' * level} {heading}\n")
         if heading in {"Parameters", "Attributes", "Returns", "Raises"}:
@@ -206,6 +225,26 @@ def reference(cls):
     return "\n".join(output).strip()
 
 
+def format_reference(text):
+    """Apply the repository formatter to rendered doctest fences."""
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ruff",
+            "format",
+            "--stdin-filename",
+            "reference.md",
+            "-",
+        ],
+        input=text,
+        text=True,
+        capture_output=True,
+        check=True,
+        cwd=ROOT,
+    ).stdout.rstrip()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -213,7 +252,13 @@ def main():
     for name, slug in CLASSES.items():
         path = ROOT / "docs" / "classes" / f"{slug}.md"
         content = path.read_text()
-        generated = START + "\n" + reference(getattr(polars_learn, name)) + "\n" + END
+        generated = (
+            START
+            + "\n"
+            + format_reference(reference(getattr(polars_learn, name)))
+            + "\n"
+            + END
+        )
         updated = re.sub(
             re.escape(START) + r".*?" + re.escape(END),
             lambda _, replacement=generated: replacement,
@@ -229,6 +274,28 @@ def main():
             )
         if not args.check:
             path.write_text(updated)
+    covered = set(CLASSES)
+    exception_lines = ["# Errors and warnings\n"]
+    for name in polars_learn.__all__:
+        if name in covered:
+            continue
+        obj = getattr(polars_learn, name)
+        if not inspect.isclass(obj) or not issubclass(obj, (Exception, Warning)):
+            raise ValueError(f"Undocumented public object: {name}")
+        covered.add(name)
+        exception_lines.append(f"## polars_learn.{name}\n")
+        # Builtin exception constructors have no inspectable signature.
+        if "__init__" in obj.__dict__:
+            exception_lines.append(signature_block(obj, name, is_class=True))
+        exception_lines.append(render_doc(inspect.getdoc(obj) or "", 3))
+    assert covered == set(polars_learn.__all__)
+    exception_path = ROOT / "docs" / "exceptions.md"
+    generated_exceptions = "\n".join(exception_lines)
+    if args.check:
+        if exception_path.read_text() != generated_exceptions:
+            raise ValueError("Stale exception reference")
+    else:
+        exception_path.write_text(generated_exceptions)
     api_path = ROOT / "docs" / "api.md"
     api = api_path.read_text()
     for name in CLASSES:
@@ -252,7 +319,10 @@ def main():
         raise ValueError("Stale API signatures; run scripts/build_api_reference.py")
     if not args.check:
         api_path.write_text(api)
-    print("All six class references match source signatures and docstrings.")
+    print(
+        "All 12 public objects are covered; "
+        "references match source signatures and docstrings."
+    )
 
 
 if __name__ == "__main__":

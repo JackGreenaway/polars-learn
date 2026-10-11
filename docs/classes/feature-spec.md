@@ -52,6 +52,10 @@ The engineer applies specifications in the order you supply them.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If the expression sequence is empty, an explicit alias is ambiguous, output names are duplicated, a label is invalid, or verbosity is outside the supported levels.</p></dd>
 </dl>
 
+### See also
+
+[FeatureEngineer](feature-engineer.md): Execute an ordered sequence of specifications.
+
 ### Notes
 
 Existing columns may be overwritten deliberately. Expressions follow native
@@ -70,6 +74,16 @@ InconsistentVersionWarning before state restoration. Compatible cross-version
 expressions are attempted using JSON; incompatible state raises
 SerializationError. Load trusted artifacts only and validate after upgrading.
 
+### Examples
+
+```pycon
+>>> import polars as pl
+>>> from polars_learn import FeatureSpec
+>>> spec = FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")
+>>> spec.expression[0].meta.output_name()
+'notional'
+```
+
 ### Methods
 
 FeatureSpec is a description, not an estimator. It has no fit, transform, or prediction methods. Pass it to FeatureEngineer for execution.
@@ -81,53 +95,6 @@ FeatureSpec is a description, not an estimator. It has no fit, transform, or pre
 </div>
 <!-- END GENERATED REFERENCE -->
 
-## About
+## Related guide
 
-A feature specification makes an operation explicit: the Polars expressions to evaluate together, their output names, any columns to drop, and an optional label for diagnostics. It is a lightweight description consumed by FeatureEngineer, rather than an estimator.
-
-## Why use it?
-
-Use it to organize a readable feature plan without creating a transformer class for each arithmetic operation. One required expression argument accepts either a single Expr or a nonempty sequence, normalized safely to a tuple.
-
-## Examples
-
-### Input
-
-| ask | bid |
-| --- | --- |
-| 11.0 | 9.0 |
-| 22.0 | 18.0 |
-
-### Code
-
-```python
-import polars as pl
-
-from polars_learn import FeatureEngineer, FeatureSpec
-
-quotes = pl.DataFrame({"ask": [11.0, 22.0], "bid": [9.0, 18.0]})
-spec = FeatureSpec(
-    [
-        (pl.col("ask") - pl.col("bid")).alias("spread"),
-        ((pl.col("ask") + pl.col("bid")) / 2).alias("mid"),
-    ],
-    drop=["ask", "bid"],
-    name="quote_features",
-)
-prepared = FeatureEngineer(spec).fit_transform(quotes)
-assert prepared.to_dict(as_series=False) == {"spread": [2.0, 4.0], "mid": [10.0, 20.0]}
-assert isinstance(spec.expression, tuple)
-```
-
-### Output
-
-| spread | mid |
-| --- | --- |
-| 2.0 | 10.0 |
-| 4.0 | 20.0 |
-
-The assertions in the example verify the output against the implementation. Python examples are executed during documentation validation.
-
-## Practical notes
-
-Sibling expressions execute together; they cannot consume columns created by siblings. Put dependent expressions in later specifications. An explicit alias requires one expression with one output. Empty sequences, invalid types, and detectable duplicate output names fail during construction. Dict configs accept the same constructor keys; there is no expressions alias.
+[Concepts and worked workflows](../user-guide/feature-spec-details.md).

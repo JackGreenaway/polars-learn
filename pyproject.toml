@@ -51,3 +51,6 @@ reportMissingTypeStubs = false
 reportUnnecessaryIsInstance = false
 venvPath = "."
 venv = ".venv"
+
+[tool.ruff.format]
+docstring-code-format = true

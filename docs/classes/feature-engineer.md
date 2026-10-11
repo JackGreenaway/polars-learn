@@ -60,6 +60,11 @@ Prefer native Polars input/output for speed and to avoid conversion overhead.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If verbosity is outside 0, 1, and 2 or a config dict fails FeatureSpec validation, such as an empty expression sequence or an ambiguous alias.</p></dd>
 </dl>
 
+### See also
+
+[FeatureSpec](feature-spec.md): Describe one feature operation.
+[SchemaValidator](schema-validator.md): Validate and normalise raw input before engineering.
+
 ### Notes
 
 Specifications preserve the supplied sequence order in fit and transform.
@@ -84,6 +89,29 @@ Python callbacks. Version mismatches warn before state restoration, then
 compatible loading is attempted. Incompatible state raises SerializationError.
 Load trusted artifacts only and validate features after upgrading.
 
+### Examples
+
+```pycon
+>>> import polars as pl
+>>> from polars_learn import FeatureEngineer, FeatureSpec
+>>> X = pl.DataFrame({"price": [10.0], "quantity": [2]})
+>>> engineer = FeatureEngineer(
+...     FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")
+... )
+>>> engineer.fit_transform(X)["notional"].to_list()
+[20.0]
+>>> engineer.get_feature_names_out().tolist()
+['price', 'quantity', 'notional']
+>>> configured = FeatureEngineer(
+...     {
+...         "expression": pl.col("price") * pl.col("quantity"),
+...         "alias": "notional",
+...     }
+... )
+>>> configured.fit_transform(X)["notional"].to_list()
+[20.0]
+```
+
 ### Methods
 
 | Method | Purpose |
@@ -100,7 +128,7 @@ Load trusted artifacts only and validate features after upgrading.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L226">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L228">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Validate training expressions and learn input and output schemas.
 
@@ -137,7 +165,7 @@ statistics. Returns the fitted transformer, not the engineered frame.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L318">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L320">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
 Generate features and verify the fitted output schema.
 
@@ -189,7 +217,7 @@ FeatureEngineeringError, preserving their causes.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L270">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L272">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
     X,
     y=None,
     **fit_params,
@@ -225,6 +253,11 @@ requires `convert_pandas=True` independently of the output choice.
 <dl class="api-fields">
 <dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Result of fitting and transforming the same input. Default preserves input kind; set_output can force eager, lazy, or pandas output.</p></dd>
 </dl>
+
+#### See also
+
+`fit`: Learn the fitted schema and feature names.
+`transform`: Apply the fitted transformer and its validation policies.
 
 </div>
 
@@ -378,55 +411,6 @@ wrap an already evaluated result; use lazy input to defer evaluation.
 </div>
 <!-- END GENERATED REFERENCE -->
 
-## About
+## Related guide
 
-Feature preparation becomes part of the model pipeline. Define derived columns once, fit the raw-input and output-schema contract, and let prediction replay the same definitions before the estimator receives its features.
-
-## Why use it?
-
-Use it when training and serving must share ordered, deterministic feature logic. It is especially useful for dependent features: calculate an intermediate column in one specification, consume it in the next, and drop it before the model boundary.
-
-## Examples
-
-### Input
-
-| price | quantity |
-| --- | --- |
-| 10.0 | 2 |
-| 20.0 | 3 |
-
-### Code
-
-```python
-import polars as pl
-
-from polars_learn import FeatureEngineer, FeatureSpec
-
-raw = pl.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
-engineer = FeatureEngineer(
-    [
-        FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional"),
-        FeatureSpec(
-            pl.col("notional").log1p(), alias="log_notional", drop=["quantity"]
-        ),
-    ]
-)
-prepared = engineer.fit_transform(raw)
-assert prepared.columns == ["price", "notional", "log_notional"]
-assert prepared["notional"].to_list() == [20.0, 60.0]
-assert prepared["log_notional"].equals(pl.Series("log_notional", [20.0, 60.0]).log1p())
-assert raw.columns == ["price", "quantity"]
-```
-
-### Output
-
-| price | notional | log_notional |
-| --- | --- | --- |
-| 10.0 | 20.0 | 3.044522437723423 |
-| 20.0 | 60.0 | 4.110873864173311 |
-
-The assertions in the example verify the output against the implementation. Python examples are executed during documentation validation.
-
-## Practical notes
-
-Put the engineer before the predictive estimator and pass raw data to both pipeline.fit and pipeline.predict. It records schemas rather than learned feature statistics; use fitted statistical preprocessing for training-derived means, scales, or vocabularies. Eager fit_transform evaluates expressions twice. See the [complete prediction pipeline](../getting-started.md#your-first-raw-data-prediction-pipeline).
+[Concepts and worked workflows](../user-guide/feature-engineer-details.md).

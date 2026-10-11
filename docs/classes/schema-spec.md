@@ -65,6 +65,10 @@ Prefer native Polars input/output for speed and to avoid conversion overhead.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If schema is empty or not a dict, or an option has an invalid value.</p></dd>
 </dl>
 
+### See also
+
+[SchemaValidator](schema-validator.md): Learn required dtypes and allow inference-only extra names.
+
 ### Notes
 
 DataFrames return DataFrames and LazyFrames return unevaluated LazyFrames
@@ -73,6 +77,17 @@ Required dtypes must match exactly; there is no casting. Required output
 columns follow schema key order, then preserved extras follow input order.
 Transform requires fitting and exact fitted output names/order, including
 preserved extras. Extra dtypes are not validated.
+
+### Examples
+
+```pycon
+>>> import polars as pl
+>>> from polars_learn import SchemaSpec
+>>> X = pl.DataFrame({"extra": [9], "x": [1]})
+>>> contract = SchemaSpec({"x": pl.Int64}, allow_extra_columns=True, extra_columns="drop")
+>>> contract.fit_transform(X.lazy()).collect().columns
+['x']
+```
 
 ### Methods
 
@@ -214,6 +229,11 @@ requires `convert_pandas=True` independently of the output choice.
 <dl class="api-fields">
 <dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Transformed input. Default preserves input kind; set_output can force an eager DataFrame or LazyFrame. Converted pandas is eager.</p></dd>
 </dl>
+
+#### See also
+
+`fit`: Validate input and record fitted state.
+`transform`: Apply the fitted transformation and output configuration.
 
 </div>
 
@@ -367,51 +387,6 @@ wrap an already evaluated result; use lazy input to defer evaluation.
 </div>
 <!-- END GENERATED REFERENCE -->
 
-## About
+## Related guide
 
-A declared schema is an executable input contract. SchemaSpec checks that required names, dtypes, and order match your application definition, instead of inferring the definition from whichever training frame happens to arrive.
-
-## Why use it?
-
-Use it when the upstream interface is known in advance, such as a documented scoring request schema. Allow extra transport metadata while dropping it from model input, or reject extras entirely.
-
-## Examples
-
-### Input
-
-| request_id (Int64) | price (Float64) | quantity (Int64) |
-| --- | --- | --- |
-| 7 | 10.0 | 2 |
-| 8 | 20.0 | 3 |
-
-### Code
-
-```python
-import polars as pl
-
-from polars_learn import SchemaSpec
-
-raw = pl.DataFrame({"request_id": [7, 8], "price": [10.0, 20.0], "quantity": [2, 3]})
-contract = SchemaSpec(
-    {"price": pl.Float64, "quantity": pl.Int64},
-    allow_extra_columns=True,
-    extra_columns="drop",
-)
-prepared = contract.fit_transform(raw)
-assert prepared.equals(raw.select("price", "quantity"))
-assert contract.schema_ == {"price": pl.Float64, "quantity": pl.Int64}
-assert contract.get_feature_names_out().tolist() == ["price", "quantity"]
-```
-
-### Output
-
-| price (Float64) | quantity (Int64) |
-| --- | --- |
-| 10.0 | 2 |
-| 20.0 | 3 |
-
-The assertions in the example verify the output against the implementation. Python examples are executed during documentation validation.
-
-## Practical notes
-
-This class does not cast: wrong required dtypes are errors. It validates names and types, not nullability, value ranges, or business rules. Use SchemaValidator for a learned schema and explicit cast policy.
+[Concepts and worked workflows](../user-guide/schema-spec-details.md).

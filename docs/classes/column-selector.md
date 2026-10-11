@@ -59,10 +59,26 @@ Prefer native Polars input/output for speed and to avoid conversion overhead.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If selected or final renamed names are duplicated, rename keys are unselected, or verbosity is outside 0, 1, and 2.</p></dd>
 </dl>
 
+### See also
+
+[SchemaSpec](schema-spec.md): Validate explicit required dtypes before selecting columns.
+[FeaturePassthrough](feature-passthrough.md): Explicit unchanged-column selection without renaming.
+
 ### Notes
 
 DataFrames return DataFrames and LazyFrames return unevaluated LazyFrames
 by default. Use set_output to force eager, lazy, or pandas output.
+
+### Examples
+
+```pycon
+>>> import polars as pl
+>>> from polars_learn import ColumnSelector
+>>> X = pl.DataFrame({"a": [1], "b": [2]})
+>>> selector = ColumnSelector(["b"], rename={"b": "value"})
+>>> selector.fit_transform(X.lazy()).collect().columns
+['value']
+```
 
 ### Methods
 
@@ -204,6 +220,11 @@ requires `convert_pandas=True` independently of the output choice.
 <dl class="api-fields">
 <dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Transformed input. Default preserves input kind; set_output can force an eager DataFrame or LazyFrame. Converted pandas is eager.</p></dd>
 </dl>
+
+#### See also
+
+`fit`: Validate input and record fitted state.
+`transform`: Apply the fitted transformation and output configuration.
 
 </div>
 
@@ -357,46 +378,6 @@ wrap an already evaluated result; use lazy input to defer evaluation.
 </div>
 <!-- END GENERATED REFERENCE -->
 
-## About
+## Related guide
 
-A named selection step establishes the exact feature subset and order, with optional renaming. It makes the model-facing layout visible in the pipeline instead of leaving selection to an external helper.
-
-## Why use it?
-
-Use it to remove unused raw or intermediate columns, reorder features deliberately, or adapt names for downstream consumers. Use FeaturePassthrough when selection should communicate that names and values remain unchanged.
-
-## Examples
-
-### Input
-
-| price | quantity | request_id |
-| --- | --- | --- |
-| 10.0 | 2 | 7 |
-| 20.0 | 3 | 8 |
-
-### Code
-
-```python
-import polars as pl
-
-from polars_learn import ColumnSelector
-
-raw = pl.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3], "request_id": [7, 8]})
-selector = ColumnSelector(["quantity", "price"], rename={"quantity": "qty"})
-prepared = selector.fit_transform(raw)
-assert prepared.to_dict(as_series=False) == {"qty": [2, 3], "price": [10.0, 20.0]}
-assert selector.get_feature_names_out().tolist() == ["qty", "price"]
-```
-
-### Output
-
-| qty | price |
-| --- | --- |
-| 2 | 10.0 |
-| 3 | 20.0 |
-
-The assertions in the example verify the output against the implementation. Python examples are executed during documentation validation.
-
-## Practical notes
-
-Selection does not validate dtype drift or cast values. Pair it with a schema step when dtype enforcement matters. Selected columns must exist, and output names must be unique. Unselected columns are omitted.
+[Concepts and worked workflows](../user-guide/column-selector-details.md).

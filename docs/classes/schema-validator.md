@@ -65,6 +65,10 @@ Prefer native Polars input/output for speed and to avoid conversion overhead.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If mode, extra_columns, or verbosity is invalid.</p></dd>
 </dl>
 
+### See also
+
+[FeatureEngineer](feature-engineer.md): Engineer features after validating raw inputs.
+
 ### Notes
 
 Semi-strict allows integer widening when the source dtype's entire range
@@ -82,6 +86,18 @@ Default output preserves input kind. set_output can force "polars" (eager)
 or "polars-lazy" output, or pandas output for compatibility.
 With enforced order and preserved extras, output
 keeps input order; disabling order enforcement puts required columns first.
+
+### Examples
+
+```pycon
+>>> import polars as pl
+>>> from polars_learn import SchemaValidator
+>>> train = pl.DataFrame({"x": pl.Series([1], dtype=pl.Int64)})
+>>> test = pl.DataFrame({"x": pl.Series([2], dtype=pl.Int32)})
+>>> validator = SchemaValidator(mode="semi-strict").fit(train)
+>>> validator.transform(test).schema["x"]
+Int64
+```
 
 ### Methods
 
@@ -222,6 +238,11 @@ requires `convert_pandas=True` independently of the output choice.
 <dl class="api-fields">
 <dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Result of fitting and transforming the same input. Default preserves input kind; set_output can force eager, lazy, or pandas output.</p></dd>
 </dl>
+
+#### See also
+
+`fit`: Learn the fitted schema and feature names.
+`transform`: Apply the fitted transformer and its validation policies.
 
 </div>
 
@@ -375,49 +396,6 @@ wrap an already evaluated result; use lazy input to defer evaluation.
 </div>
 <!-- END GENERATED REFERENCE -->
 
-## About
+## Related guide
 
-Training data establishes the schema that new observations must satisfy. SchemaValidator learns names and dtypes during fit, then checks incoming structure and applies the selected dtype policy during transform.
-
-## Why use it?
-
-Use it to detect prediction-time schema drift, keep required feature order stable, and make conversions a deliberate policy. Strict rejects dtype changes; semi-strict permits defined widening; permissive attempts strict Polars casts.
-
-## Examples
-
-### Input
-
-Training: `price: Float64`, `quantity: Int64`.
-
-| quantity (String) | price (String) |
-| --- | --- |
-| "2" | "15.0" |
-| "4" | "25.0" |
-
-### Code
-
-```python
-import polars as pl
-
-from polars_learn import SchemaValidator
-
-train = pl.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
-incoming = pl.DataFrame({"quantity": ["2", "4"], "price": ["15.0", "25.0"]})
-validator = SchemaValidator(mode="permissive", enforce_column_order=False).fit(train)
-prepared = validator.transform(incoming)
-assert prepared.to_dict(as_series=False) == {"price": [15.0, 25.0], "quantity": [2, 4]}
-assert dict(prepared.schema) == validator.schema_
-```
-
-### Output
-
-| price (Float64) | quantity (Int64) |
-| --- | --- |
-| 15.0 | 2 |
-| 25.0 | 4 |
-
-The assertions in the example verify the output against the implementation. Python examples are executed during documentation validation.
-
-## Practical notes
-
-Permissive casts may lose information even when successful; choose the policy for your data contract. Missing required columns still fail. Lazy value checks execute at collection, and nullability is not learned. Consult the [class reference](#reference) and [casting policy details](../user-guide/schemas.md#learn-the-training-schema) for the exact widening and precision rules.
+[Concepts and worked workflows](../user-guide/schema-validator-details.md).

@@ -19,6 +19,8 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - User guide:
+      - Overview: user-guide/index.md
+      - Raw data workflow: user-guide/pipeline-workflow.md
       - Estimators and pipelines: user-guide/estimators.md
       - Feature engineering: user-guide/features.md
       - Schema contracts: user-guide/schemas.md
@@ -26,7 +28,13 @@ nav:
       - LazyFrames and pandas: user-guide/frames.md
       - Saving and loading: user-guide/persistence.md
       - Diagnostics and errors: user-guide/diagnostics.md
-  - Classes:
+      - Column Selector Details: user-guide/column-selector-details.md
+      - Feature Engineer Details: user-guide/feature-engineer-details.md
+      - Feature Passthrough Details: user-guide/feature-passthrough-details.md
+      - Feature Spec Details: user-guide/feature-spec-details.md
+      - Schema Spec Details: user-guide/schema-spec-details.md
+      - Schema Validator Details: user-guide/schema-validator-details.md
+  - API classes:
       - FeatureEngineer: classes/feature-engineer.md
       - FeatureSpec: classes/feature-spec.md
       - SchemaSpec: classes/schema-spec.md
@@ -35,10 +43,13 @@ nav:
       - FeaturePassthrough: classes/feature-passthrough.md
   - Examples:
       - Overview: examples/index.md
+      - Held-out order fees: examples/held-out-orders.md
       - Lazy prediction pipeline: examples/lazy-pipeline.md
       - Cross-validation: examples/cross-validation.md
+  - Additional workflows: legacy-workflows.md
   - Production: production.md
   - API reference: api.md
+  - Errors and warnings: exceptions.md
   - Troubleshooting: troubleshooting.md
   - Development and Pages: development.md
 plugins:

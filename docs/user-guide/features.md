@@ -245,3 +245,17 @@ The function should be pure and deterministic, with serializable state. Eager `f
 Input frames are never mutated. Expressions within one specification execute together and cannot consume new sibling outputs; split dependencies into ordered specifications. Existing names may be deliberately overwritten. `fit_transform` calls `fit` and then `transform`, so eager feature expressions execute twice. Lazy inputs defer row execution unless eager output is requested. Prefer native expressions to Python callbacks for portable, reviewable feature logic.
 
 See [`FeatureSpec`](../api.md#featurespec) and [`FeatureEngineer`](../api.md#featureengineer) for exact validation, fitted schema, and exception behavior.
+
+## Mathematical model and leakage
+
+For a frame of observations X, an ordered plan applies stages
+<math xmlns="http://www.w3.org/1998/Math/MathML" aria-label="X sub k plus one equals T sub k of X sub k"><msub><mi>X</mi><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><msub><mi>T</mi><mi>k</mi></msub><mo>(</mo><msub><mi>X</mi><mi>k</mi></msub><mo>)</mo></math>.
+Each stage adds or replaces columns, then drops configured columns. Sibling
+expressions read the same stage input; stage order is therefore significant.
+For an order i, transaction value is vᵢ = pᵢ qᵢ. This row-local calculation
+is stable across batches. A mean expression, μ(B) = Σᵢ xᵢ / |B|, instead
+recomputes over the current batch B. Fitting FeatureEngineer does not store
+μ from training. Such batch-dependent features can change at prediction time
+and leak held-out information if evaluated before splitting. Use a fitted
+statistical transformer to store training statistics, and fit it inside each
+training fold. Keep targets and future information out of feature expressions.

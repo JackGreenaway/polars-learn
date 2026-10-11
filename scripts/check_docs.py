@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import doctest
 import io
 import re
 import subprocess
@@ -25,6 +26,7 @@ def main() -> None:
             if line.startswith("```"):
                 if not in_fence and line.strip() not in {
                     "```python",
+                    "```pycon",
                     "```bash",
                     "```text",
                 }:
@@ -35,7 +37,9 @@ def main() -> None:
         if in_fence:
             raise ValueError(f"Unclosed code block in {path}")
 
-        def check(match: re.Match[str], example_path: Path = path) -> str:
+        def check(
+            match: re.Match[str], example_path: Path = path, source: str = contents
+        ) -> str:
             nonlocal count
             code = match[1]
             formatted = subprocess.run(
@@ -74,14 +78,30 @@ def main() -> None:
                 check=True,
                 cwd=ROOT,
             )
-            with contextlib.redirect_stdout(io.StringIO()):
+            capture = io.StringIO()
+            with contextlib.redirect_stdout(capture):
                 exec(
                     compile(formatted, str(example_path), "exec"),
                     {"__name__": "__main__"},
                 )
+            following = source[match.end() :]
+            expected = re.match(
+                r"\s*<!-- verified-output -->\n```text\n(.*?)```", following, re.S
+            )
+            if expected and capture.getvalue() != expected[1]:
+                raise ValueError(
+                    f"Displayed output differs from execution: {example_path}"
+                )
             count += 1
             return f"```python\n{formatted}```"
 
+        for transcript in re.findall(r"```pycon\n(.*?)```", contents, re.S):
+            test = doctest.DocTestParser().get_doctest(
+                transcript, {}, str(path), str(path), 0
+            )
+            result = doctest.DocTestRunner().run(test)
+            if result.failed:
+                raise ValueError(f"Failed reference doctest: {path}")
         contents = re.sub(r"```python\n(.*?)```", check, contents, flags=re.S)
         if args.format:
             path.write_text(contents)

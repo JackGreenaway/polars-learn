@@ -24,13 +24,29 @@ pipeline = Pipeline(
     ]
 )
 pipeline.fit(raw.lazy(), np.array([1.0, 2.0, 3.0, 4.0]))
-predictions = pipeline.predict(raw.head(2).lazy())
+incoming = pl.DataFrame({"price": [15.0, 25.0], "quantity": [2, 3]})
+predictions = pipeline.predict(incoming.lazy())
 assert predictions.shape == (2,)
+print(f"Predictions returned: {len(predictions)}")
 assert pipeline[:-1].get_feature_names_out().tolist() == [
     "price",
     "quantity",
     "notional",
 ]
 ```
+<!-- verified-output -->
+```text
+Predictions returned: 2
+```
 
 The schema step preserves lazy input. The feature step requests eager output, so its returned result is collected before reaching the model. Eager fitting and fit_transform behavior can still evaluate preparation more than once; this is not a promise of a single source scan. Keep source access and execution errors within your request's error handling. See [lazy execution](../user-guide/frames.md).
+
+
+## Interpretation and next steps
+
+The four local training orders have illustrative targets 1 through 4. Two new
+orders produce two predictions; this tiny fixture demonstrates the collection
+boundary, not predictive accuracy. `set_output(transform="polars")` materializes
+the feature step because the forest needs eager values. Use the
+[held-out workflow](held-out-orders.md) to evaluate predictions before deploying.
+For file scans, keep sources available through collection and monitor memory use.

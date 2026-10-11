@@ -58,6 +58,10 @@ Prefer native Polars input/output for speed and to avoid conversion overhead.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If selected names are duplicated or verbosity is outside 0, 1, and 2. Fit and transform also reject missing selected columns.</p></dd>
 </dl>
 
+### See also
+
+[ColumnSelector](column-selector.md): Select columns with optional renaming.
+
 ### Notes
 
 This is a scikit-learn transformer with inherited fit, transform,
@@ -76,6 +80,19 @@ Source/schema-resolution and collection errors are not wrapped.
 A sequential pipeline step returns only its selected columns. To retain
 them alongside columns transformed in another branch, use ColumnTransformer
 with eager input, a branch for each operation, and Polars output.
+
+### Examples
+
+```pycon
+>>> import polars as pl
+>>> from polars_learn import FeaturePassthrough
+>>> X = pl.DataFrame({"id": [1, 2], "value": [3.0, 4.0]})
+>>> keep = FeaturePassthrough(["id"])
+>>> keep.fit_transform(X.lazy()).collect().to_dict(as_series=False)
+{'id': [1, 2]}
+>>> keep.get_feature_names_out().tolist()
+['id']
+```
 
 ### Methods
 
@@ -217,6 +234,11 @@ requires `convert_pandas=True` independently of the output choice.
 <dl class="api-fields">
 <dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Transformed input. Default preserves input kind; set_output can force an eager DataFrame or LazyFrame. Converted pandas is eager.</p></dd>
 </dl>
+
+#### See also
+
+`fit`: Validate input and record fitted state.
+`transform`: Apply the fitted transformation and output configuration.
 
 </div>
 
@@ -370,47 +392,6 @@ wrap an already evaluated result; use lazy input to defer evaluation.
 </div>
 <!-- END GENERATED REFERENCE -->
 
-## About
+## Related guide
 
-An explicit unchanged-feature step selects named columns while preserving their Polars values, names, dtypes, nulls, and row order. It communicates the selection contract more clearly than an anonymous passthrough string.
-
-## Why use it?
-
-Use it for features that need no transformation, particularly a ColumnTransformer branch alongside transformed features. In a sequential pipeline it returns only the named columns, so the next step receives that subset.
-
-## Examples
-
-### Input
-
-| id (Int64) | flag (Boolean) | unused (Int64) |
-| --- | --- | --- |
-| 7 | true | 9 |
-| null | false | 8 |
-
-### Code
-
-```python
-import polars as pl
-
-from polars_learn import FeaturePassthrough
-
-raw = pl.DataFrame({"id": [7, None], "flag": [True, False], "unused": [9, 8]})
-keep = FeaturePassthrough(["flag", "id"])
-prepared = keep.fit_transform(raw)
-assert prepared.equals(raw.select("flag", "id"))
-assert prepared.to_dict(as_series=False) == {"flag": [True, False], "id": [7, None]}
-assert dict(prepared.schema) == {"flag": pl.Boolean, "id": pl.Int64}
-```
-
-### Output
-
-| flag (Boolean) | id (Int64) |
-| --- | --- |
-| true | 7 |
-| false | null |
-
-The assertions in the example verify the output against the implementation. Python examples are executed during documentation validation.
-
-## Practical notes
-
-There is no rename or cast option. Input order and dtypes may change without rejection; add schema validation when those changes must fail. See [parallel branch examples](../user-guide/selection.md) for combining unchanged and transformed features.
+[Concepts and worked workflows](../user-guide/feature-passthrough-details.md).
