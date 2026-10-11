@@ -30,7 +30,8 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         are treated as one-element sequences. Specifications are applied in the
         supplied sequence order. Each specification adds its expressions, then
         drops its configured columns, before the next specification is applied.
-        Later specifications may reference earlier outputs that remain present. An empty sequence produces an identity transformation;
+        Later specifications may reference earlier outputs that remain present.
+        An empty sequence produces an identity transformation;
         an empty dict is invalid. The original parameter is retained unchanged
         for estimator cloning.
     convert_pandas : bool, default=False
