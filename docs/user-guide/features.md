@@ -184,6 +184,58 @@ assert np.allclose(predictions, [3.0])
 
 This pipeline uses two stages and retains `relative_spread` as its model input. Each prediction runs both stages on the new raw quotes before calling the fitted regressor.
 
+## Custom Python functions with map_elements
+
+`FeatureSpec` accepts a Polars expression containing `map_elements`, so you can package a named Python function alongside the feature definition. Use this for custom scalar logic that needs Python. Native Polars expressions are preferred for speed; Python callbacks execute per element and add overhead. See [Polars map_elements](https://docs.pola.rs/api/python/stable/reference/expressions/api/polars.Expr.map_elements.html).
+
+This standalone example defines a function, combines its output with a later feature stage, and verifies a pickle round-trip:
+
+```python
+import pickle
+
+import polars as pl
+from polars.testing import assert_frame_equal
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+
+def service_score(code: str) -> float:
+    """Convert an application service code to its fixed numeric score."""
+    scores = {"standard": 1.0, "priority": 3.0, "express": 5.0}
+    return scores.get(code.strip().lower(), 0.0)
+
+
+engineer = FeatureEngineer(
+    [
+        FeatureSpec(
+            pl.col("service").map_elements(
+                service_score, return_dtype=pl.Float64, skip_nulls=True
+            ),
+            alias="service_score",
+            drop=["service"],
+        ),
+        FeatureSpec(
+            pl.col("service_score") * pl.col("quantity"), alias="weighted_score"
+        ),
+    ]
+)
+raw = pl.DataFrame({"service": [" Priority ", "express", None], "quantity": [2, 3, 1]})
+expected = engineer.fit_transform(raw)
+assert expected["weighted_score"].to_list() == [6.0, 15.0, None]
+
+# Save the fitted component, including the expression's embedded callback.
+artifact = pickle.dumps(engineer, protocol=pickle.HIGHEST_PROTOCOL)
+restored = pickle.loads(artifact)
+assert_frame_equal(restored.transform(raw), expected)
+assert_frame_equal(restored.transform(raw.lazy()).collect(), expected)
+```
+
+Declare `return_dtype` explicitly so fitting and lazy schema checks know the callback's output type. With `skip_nulls=True`, null inputs are not passed to the function and remain null. For multi-column scalar logic, map a `pl.struct(...)` expression and read its fields in the callback. For functions that operate on a whole Series, Polars `map_batches` expressions are also supported; declare their output dtype and only mark them elementwise when that matches their behavior.
+
+The function should be pure and deterministic, with serializable state. Eager `fit_transform` evaluates feature logic during both fit and transform, and lazy plans may execute again when collected; callbacks must not rely on being called once or perform external side effects. A callback does not automatically learn or freeze training statistics.
+
+`polars-learn` serializes the Polars expression, which uses cloudpickle for its embedded Python callback. Saving a fitted pipeline containing this engineer carries the callback with its feature logic. Tests also restore local callback closures and complete fitted pipelines in a fresh Python process using pickle, cloudpickle, and joblib. Imported helper modules and external resources are not bundled automatically; make them available in the deployment environment. See [custom-function persistence](persistence.md#saving-custom-python-feature-functions) for deployment guidance.
+
 ## Deterministic expressions versus learned preprocessing
 
 `FeatureEngineer` replays expressions; it does not learn expression-specific statistics. An expression such as subtracting the current batch mean recomputes that mean on every transform call, which can make a prediction depend on the other rows in the request. Use a fitted statistical transformer when a quantity must be learned from training data and held fixed at inference. Avoid random or time-dependent expressions when reproducible predictions are required.

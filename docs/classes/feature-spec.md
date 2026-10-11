@@ -58,6 +58,10 @@ Existing columns may be overwritten deliberately. Expressions follow native
 Polars naming, so an additional alias is not required when the expression
 already has a determinable output name. Selector names and duplicates that
 depend on the input schema are resolved by the feature engineer.
+Expressions may contain map_elements or map_batches Python callbacks.
+Declare return_dtype for predictable schema checks and use pure functions
+with serializable state. Prefer native expressions for speed; callbacks
+and their dependencies must remain usable in the deployment environment.
 This class is an operation description, not a scikit-learn estimator. Its
 verbosity reports construction independently of an engineer's verbosity.
 Pickling preserves native expressions using Polars serialization, including

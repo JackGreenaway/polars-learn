@@ -2,15 +2,15 @@
 
 # polars-learn
 
-<p class="lead">Feature engineering in Polars. Prediction pipelines in scikit-learn.</p>
+<p class="lead">Train on raw data. Deploy the whole preparation pipeline.</p>
 
-The power comes from the Polars API: its expressive column operations, selectors, and eager and lazy execution. `polars-learn` packages those capabilities into reusable scikit-learn-style components, so you can define data preparation once, fit it with your model, and apply the same transformations at prediction time.
+**Your model needs its feature logic as well as its weights.** A model trained on derived features cannot safely consume raw observations unless the same preparation runs first. `polars-learn` puts feature generation, schema validation, and column selection inside a scikit-learn-style pipeline, so `fit` and `predict` share one preparation path.
 
-- Powered by the Polars expression API for feature engineering
-- Compatible with scikit-learn estimators and pipelines
-- Explicit feature names, column order, and schema policies
-- Pandas input support through behind-the-scenes conversion to Polars
-- Open source under the MIT license
+The power comes from the **Polars API**: compose expressions, use selectors, build dependent features in entry order, and choose eager or lazy execution. The package gives those transformations a reusable estimator interface and fitted schema checks.
+
+- **Keep training and serving together:** save the fitted pipeline with its feature definitions and model, then predict from raw observations.
+- **Catch structural drift before prediction:** check required columns and dtypes, control permitted casts, and make the model's feature layout explicit.
+- **Express your actual feature logic:** use native Polars operations or package custom Python callbacks when needed.
 
 <div class="docs-actions" markdown="1">
 
@@ -21,6 +21,20 @@ The power comes from the Polars API: its expressive column operations, selectors
 </div>
 
 Pandas DataFrames are supported when you install `polars-learn[pandas]` and enable `convert_pandas=True` on each transformer receiving pandas input. Conversion happens behind the scenes; transformations use the Polars API and return Polars frames by default. Pandas output is available through `set_output(transform="pandas")` for compatibility. See [pandas interoperability](user-guide/frames.md#optional-pandas-input) for details.
+
+## The problems it helps solve
+
+| A common failure point | What you put in the pipeline | What changes for training and deployment |
+| --- | --- | --- |
+| Serving forgets the preparation function or uses a different version. | Ordered `FeatureSpec` definitions executed by `FeatureEngineer`. | The saved pipeline carries the preparation; `predict` accepts raw observations and applies those definitions. |
+| A producer changes column names, order, or dtypes. | A declared or learned schema contract. | Structural mismatches fail at validation, or are normalized only through the policies you choose. |
+| A helper column accidentally reaches the model. | Explicit selection and output naming. | The estimator receives the intended columns in the intended order. |
+| Domain logic needs a Python function alongside Polars expressions. | A `map_elements` or `map_batches` expression with an explicit return dtype. | Serializable callback logic can travel with the fitted artifact and run when preparation is replayed. |
+| Evaluation fits learned preparation outside each training fold. | The complete preparation and estimator pipeline. | Cross-validation can clone and fit included learned components within each fold. |
+
+See the runnable [schema-drift examples](user-guide/schemas.md#schema-drift-at-prediction-time), [custom-function and pickle example](user-guide/features.md#custom-python-functions-with-map_elements), and [cross-validation workflow](examples/cross-validation.md). Prefer native Polars expressions for speed; Python callbacks are available for custom logic and must have serializable state and deployment dependencies available.
+
+Use this package when you want Polars-based preparation to be part of the model lifecycle. Expressions replay your logic; learned statistics still belong in fitted preprocessing steps. Schema checks validate structure and dtypes, while business rules and distribution monitoring need separate checks.
 
 ## Why pipeline scaling but leave feature generation outside?
 

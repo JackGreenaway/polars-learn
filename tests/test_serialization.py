@@ -119,7 +119,19 @@ def test_feature_spec_pickle_preserves_native_expression_execution(
     )
 
 
-def callback_spec(offset):
+def callback_spec(offset, kind="batches"):
+    if kind == "elements":
+
+        def adjust(value):
+            lookup = {1.0: 2.0, 2.0: 4.0, 3.0: 6.0, 4.0: 8.0, 5.0: 10.0}
+            return lookup[value] + offset
+
+        return FeatureSpec(
+            pl.col("price").map_elements(adjust, return_dtype=pl.Float64),
+            alias="adjusted",
+            name="element_callback",
+        )
+
     # A local closure cannot be recovered by importing a module-level function.
     return FeatureSpec(
         pl.col("price").map_batches(
@@ -132,9 +144,10 @@ def callback_spec(offset):
     )
 
 
+@pytest.mark.parametrize("kind", ["batches", "elements"])
 @pytest.mark.parametrize("protocol", PROTOCOLS)
-def test_pickle_python_callback_closures(frame, protocol):
-    spec = callback_spec(3.0)
+def test_pickle_python_callback_closures(frame, protocol, kind):
+    spec = callback_spec(3.0, kind)
     configured = {"expression": spec.expression[0], "name": spec.name}
     for original in (spec, FeatureEngineer(spec), FeatureEngineer(configured)):
         restored = pickle.loads(pickle.dumps(original, protocol=protocol))
@@ -170,8 +183,9 @@ def test_nested_schema_and_pandas_settings_round_trip(serializer):
     assert_frame_equal(restored.transform(frame), frame)
 
 
+@pytest.mark.parametrize("kind", ["batches", "elements"])
 @pytest.mark.parametrize("serializer", ["pickle", "cloudpickle", "joblib"])
-def test_complete_pipeline_loads_in_a_fresh_process(frame, tmp_path, serializer):
+def test_complete_pipeline_loads_in_a_fresh_process(frame, tmp_path, serializer, kind):
     names = ["price", "notional", "adjusted"]
     pipeline = Pipeline(
         [
@@ -184,7 +198,7 @@ def test_complete_pipeline_loads_in_a_fresh_process(frame, tmp_path, serializer)
                         FeatureSpec(
                             pl.col("price") * pl.col("quantity"), alias="notional"
                         ),
-                        callback_spec(3.0),
+                        callback_spec(3.0, kind),
                     ]
                 ),
             ),
@@ -451,3 +465,32 @@ def test_version_warnings_can_be_silenced_without_hiding_other_warnings(
             isinstance(item.message, InconsistentVersionWarning) for item in captured
         )
     assert_frame_equal(restored.transform(frame), original.transform(frame))
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_map_elements_nulls_dependencies_and_pickle(lazy):
+    def score(code):
+        return {"standard": 1.0, "priority": 3.0}.get(code.strip().lower(), 0.0)
+
+    raw = pl.DataFrame(
+        {"service": [" Priority ", "standard", None], "quantity": [2, 3, 1]}
+    )
+    incoming = raw.lazy() if lazy else raw
+    engineer = FeatureEngineer(
+        [
+            FeatureSpec(
+                pl.col("service").map_elements(
+                    score, return_dtype=pl.Float64, skip_nulls=True
+                ),
+                alias="score",
+                drop=["service"],
+            ),
+            FeatureSpec(pl.col("score") * pl.col("quantity"), alias="weighted"),
+        ]
+    ).fit(incoming)
+    restored = pickle.loads(pickle.dumps(engineer))
+    output = restored.transform(incoming)
+    result = output.collect() if lazy else output
+    assert result["weighted"].to_list() == [6.0, 3.0, None]
+    assert result.schema["score"] == pl.Float64
+    assert result.columns == ["quantity", "score", "weighted"]

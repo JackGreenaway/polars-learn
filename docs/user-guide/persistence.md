@@ -93,6 +93,14 @@ To silence this category application-wide, call `warnings.filterwarnings("ignore
 
 **Load only artifacts you trust.** Pickle-based loading can execute Python code, including through serialized expressions containing Python callbacks. Cross-version loading is a compatibility attempt, and a successful load does not guarantee identical numerical results. Validate transformed features and predictions after upgrading, and retain the original environment lockfile for recovery. Arbitrary future version transitions and unpicklable captured resources cannot be guaranteed portable. See [Polars expression persistence](https://docs.pola.rs/api/python/stable/reference/expressions/api/polars.Expr.deserialize.html) and [scikit-learn model persistence](https://scikit-learn.org/stable/model_persistence.html).
 
+## Saving custom Python feature functions
+
+A `FeatureSpec` containing a `map_elements` or `map_batches` expression can be saved with its Python callback. The [custom-function example](features.md#custom-python-functions-with-map_elements) defines a named function, fits an engineer, pickles it, reloads it, and checks identical eager and lazy outputs. Save the full fitted pipeline when the callback feeds a predictive estimator.
+
+Polars expression serialization uses cloudpickle to encode embedded Python callbacks; `cloudpickle` is already a runtime dependency. Local functions and serializable closures are supported. This packages the callback's serializable state, not an entire Python environment: importable functions or helpers may be referenced by module name, so deploy their modules and dependencies with compatible versions. Open connections, locks, clients, and other external resources must be recreated rather than assumed portable. Serialization failures raise `SerializationError` with the original cause.
+
+After loading an artifact in the target environment, compare transformed features and predictions against known expected results. Keep the training environment lockfile and deploy the full fitted artifact. Load only trusted artifacts: pickle and embedded Python callbacks can execute code. Version warnings and cross-version restoration behavior apply to callback expressions too.
+
 ## Artifact lifecycle
 
 Save the complete fitted preprocessing-and-model pipeline, its environment lockfile, and an input/output fixture that can verify features and predictions after loading. Choose version-warning filters in the loading application rather than persisting a global suppression policy in your model. See [production guidance](../production.md) for rollout checks.
