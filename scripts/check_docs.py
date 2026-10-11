@@ -20,6 +20,20 @@ def main() -> None:
     count = 0
     for path in [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]:
         contents = path.read_text()
+        in_fence = False
+        for line_number, line in enumerate(contents.splitlines(), 1):
+            if line.startswith("```"):
+                if not in_fence and line.strip() not in {
+                    "```python",
+                    "```bash",
+                    "```text",
+                }:
+                    raise ValueError(
+                        f"Missing or unsupported language: {path}:{line_number}"
+                    )
+                in_fence = not in_fence
+        if in_fence:
+            raise ValueError(f"Unclosed code block in {path}")
 
         def check(match: re.Match[str], example_path: Path = path) -> str:
             nonlocal count

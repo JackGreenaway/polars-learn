@@ -55,3 +55,27 @@ td, th { padding: 0.65rem 0.8rem !important; }
 .admonition { border-left: 4px solid var(--docs-accent); background: var(--docs-soft); padding: 1rem 1.25rem; }
 @media (max-width: 767px) { h1 { font-size: 2rem; } pre { padding: 0.8rem; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+/* Make the language explicit even before syntax highlighting runs. */
+pre:has(> code.language-python)::before,
+pre:has(> code.language-bash)::before,
+pre:has(> code.language-text)::before {
+  display: block;
+  margin-bottom: 0.75rem;
+  font: 600 0.72rem var(--bs-font-sans-serif);
+  letter-spacing: 0.08em;
+  color: var(--bs-secondary-color);
+}
+pre:has(> code.language-python)::before { content: "PYTHON"; }
+pre:has(> code.language-bash)::before { content: "SHELL"; }
+pre:has(> code.language-text)::before { content: "SIGNATURE / TEXT"; }
+.api-signature {
+  padding: 1rem 1.2rem;
+  margin: 1rem 0 1.5rem;
+  border-left: 4px solid var(--docs-accent);
+  border-radius: 0.25rem;
+  background: var(--docs-soft);
+  overflow-wrap: anywhere;
+}
+.api-signature code { color: var(--bs-body-color); font-size: 0.95rem; }
+.api-fields dt { margin-top: 1rem; font-family: var(--bs-font-monospace); font-size: 0.9rem; }
+.api-fields dd { margin: 0.4rem 0 1.2rem 1.25rem; }

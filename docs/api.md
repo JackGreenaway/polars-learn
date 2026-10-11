@@ -4,6 +4,19 @@ Import public classes and exceptions from `polars_learn`. This reference describ
 the implementation in this checkout. See the [getting started guide](getting-started.md) for complete
 workflows, examples, and development instructions.
 
+## Class reference index
+
+Choose a class for its purpose, input/output examples, constructor parameters, attributes, and methods. In the top navigation, the same pages are listed under **Classes**.
+
+| Class | Purpose | Detailed reference |
+| --- | --- | --- |
+| [FeatureEngineer](classes/feature-engineer.md) | Ordered feature construction and fitted output-schema checks. | [Parameters](classes/feature-engineer.md#parameters) · [Reference](classes/feature-engineer.md#reference) |
+| [FeatureSpec](classes/feature-spec.md) | One expression or sequence, aliases, drops, and diagnostic labels. | [Parameters](classes/feature-spec.md#parameters) · [Reference](classes/feature-spec.md#reference) |
+| [SchemaSpec](classes/schema-spec.md) | An explicitly declared required schema. | [Parameters](classes/schema-spec.md#parameters) · [Reference](classes/schema-spec.md#reference) |
+| [SchemaValidator](classes/schema-validator.md) | A learned training schema and conversion policy. | [Parameters](classes/schema-validator.md#parameters) · [Reference](classes/schema-validator.md#reference) |
+| [ColumnSelector](classes/column-selector.md) | Column selection, ordering, and optional renaming. | [Parameters](classes/column-selector.md#parameters) · [Reference](classes/column-selector.md#reference) |
+| [FeaturePassthrough](classes/feature-passthrough.md) | Explicit unchanged-column selection. | [Parameters](classes/feature-passthrough.md#parameters) · [Reference](classes/feature-passthrough.md#reference) |
+
 ## Shared Transformer Behavior
 
 `ColumnSelector`, `FeaturePassthrough`, `SchemaSpec`, `SchemaValidator`, and

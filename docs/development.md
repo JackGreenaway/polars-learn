@@ -24,6 +24,7 @@ uv run --locked --group docs mkdocs serve
 Open the local URL printed by MkDocs. To build a deployable static site and validate every standalone Python example:
 
 ```bash
+uv run --locked --group docs python scripts/build_api_reference.py --check
 uv run --locked --group docs python scripts/check_docs.py
 uv run --locked --group docs mkdocs build --strict
 ```
@@ -50,3 +51,5 @@ The package release workflows are separate from documentation deployment. The ex
 Update the user guide, API contract, and relevant examples together with interface changes. Keep public signatures, defaults, fitted attributes, output policies, and error timing synchronized with the implementation. Production claims should describe behavior that is verified, rather than promise universal estimator compatibility, portable arbitrary callbacks, or identical results across dependency upgrades.
 
 The documentation describes the code deployed from the main branch. It is a single current site, not a separate hosted manual for each package release; check the package version and API when using an older installed distribution.
+
+Class references are generated from the live public signatures and NumPy-style docstrings by `scripts/build_api_reference.py`. After changing source documentation or signatures, run `uv run --locked python scripts/build_api_reference.py` and commit the updated Markdown. CI checks that generated references match the implementation. Class introductions and worked examples remain manually authored outside the generated markers.

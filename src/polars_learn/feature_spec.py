@@ -292,6 +292,8 @@ class FeatureSpec:
         Columns to drop after evaluating this specification.
     name : str or None
         Optional debugging label.
+    verbosity : int
+        Configured diagnostic level, independent of the feature engineer.
 
     Raises
     ------

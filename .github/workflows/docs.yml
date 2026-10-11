@@ -21,6 +21,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Install locked documentation and development dependencies
         run: uv sync --locked --group docs --python 3.11
+      - name: Check class references match the implementation
+        run: uv run --locked --group docs python scripts/build_api_reference.py --check
       - name: Check runnable documentation examples with Ruff
         run: uv run --locked --group docs python scripts/check_docs.py
       - name: Build documentation with strict link checks

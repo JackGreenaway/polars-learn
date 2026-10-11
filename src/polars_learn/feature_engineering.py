@@ -59,7 +59,7 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         dict has unknown keys, or a config has invalid FeatureSpec value types.
     ValueError
         If verbosity is outside 0, 1, and 2 or a config dict fails FeatureSpec
-        validation, such as unsupported expression values or an empty dict.
+        validation, such as an empty expression sequence or an ambiguous alias.
 
     See Also
     --------

@@ -27,7 +27,7 @@ A production prediction starts with raw data. `polars-learn` keeps the expressio
 | [`ColumnSelector`](classes/column-selector.md) | Select, order, and optionally rename columns. | Establish the exact model input names and order. |
 | [`FeaturePassthrough`](classes/feature-passthrough.md) | Select named columns without changing their values or dtypes. | Explicitly retain features that need no transformation. |
 
-Each class page includes its purpose, when to use it, a runnable example with input/output tables, production considerations, and its constructor reference. The [complete API reference](api.md) collects the shared estimator contract and all exceptions in one place.
+Each class page includes its purpose, when to use it, a runnable example with input/output tables, production considerations, and its scikit-learn-style reference with typed Parameters, Attributes, and individually documented Methods. The [complete API reference](api.md) collects the shared estimator contract and all exceptions in one place.
 
 ## Read by task
 
