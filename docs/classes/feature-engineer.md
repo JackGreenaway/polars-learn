@@ -18,7 +18,7 @@ Apply ordered feature specifications to Polars DataFrames or LazyFrames.
 ### Parameters
 
 <dl class="api-fields">
-<dt><code class="api-field-name">features</code> <span class="api-field-type">FeatureSpec, dict, or sequence of FeatureSpec/dict</span></dt><dd><p>A specification or a dict of FeatureSpec keyword arguments, optionally in an ordered sequence mixing both forms. Dicts are unpacked into FeatureSpec and validated before processing input. Single definitions are treated as one-element sequences. Later specifications may reference earlier outputs. An empty sequence produces an identity transformation; an empty dict is invalid. The original parameter is retained unchanged for estimator cloning.</p></dd>
+<dt><code class="api-field-name">features</code> <span class="api-field-type">FeatureSpec, dict, or sequence of FeatureSpec/dict</span></dt><dd><p>A specification or a dict of FeatureSpec keyword arguments, optionally in an ordered sequence mixing both forms. Dicts are unpacked into FeatureSpec and validated before processing input. Single definitions are treated as one-element sequences. Specifications are applied in the supplied sequence order. Each specification adds its expressions, then drops its configured columns, before the next specification is applied. Later specifications may reference earlier outputs that remain present. An empty sequence produces an identity transformation; an empty dict is invalid. The original parameter is retained unchanged for estimator cloning.</p></dd>
 <dt><code class="api-field-name">convert_pandas</code> <span class="api-field-type">bool, default=False</span></dt><dd><p>Allow pandas DataFrames and convert them to Polars. Requires pandas; some dtypes also require PyArrow. No conversion occurs for Polars input.</p></dd>
 <dt><code class="api-field-name">verbosity</code> <span class="api-field-type">{0, 1, 2}, default=0</span></dt><dd><p>Print progress at 1 and schema/operation details at 2; 0 is silent.</p></dd>
 <dt><code class="api-field-name">warn_on_conversion</code> <span class="api-field-type">bool, default=True</span></dt><dd><p>Emit <code>PandasConversionWarning</code> when converting pandas input.</p></dd>
@@ -43,6 +43,11 @@ Apply ordered feature specifications to Polars DataFrames or LazyFrames.
 
 ### Notes
 
+Specifications preserve the supplied sequence order in fit and transform.
+Expressions within one specification are siblings: they read the columns
+available before that specification, not new sibling outputs. Use later
+specifications to reference newly created columns, or compose expressions
+directly from existing input columns in one specification.
 The public API accepts DataFrames and LazyFrames. Lazy inputs are checked
 using schema metadata and return unevaluated plans by default. Eager input
 executes the training transformation; lazy fit validates its schema only.
@@ -74,7 +79,7 @@ Load trusted artifacts only and validate features after upgrading.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L197">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L204">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Validate training expressions and learn input and output schemas.
 
@@ -105,7 +110,7 @@ Validate training expressions and learn input and output schemas.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L266">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L273">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
 Generate features and verify the fitted output schema.
 
@@ -143,7 +148,7 @@ FeatureEngineeringError, preserving their causes.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L235">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L242">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
     X,
     y=None,
     **fit_params,

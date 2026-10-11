@@ -61,6 +61,10 @@ Fitting eager input evaluates the feature expressions. Fitting lazy input checks
 
 ## Sibling features and dependent stages
 
+**Feature specifications are applied in exactly the order you supply them.** In `FeatureEngineer([first, second, third])`, the first specification adds its features and applies its drops, the second receives that result, and the third receives the second's result. This order is preserved during both fitting and transformation, so later specifications can build on columns created earlier. A column dropped by an earlier stage is no longer available.
+
+For a LazyFrame, the specifications build a query plan in that dependency order; row evaluation remains deferred until collection. Polars may optimize execution while preserving the query's meaning. Specification order describes how the transformations compose, rather than requiring each stage to materialize a separate frame.
+
 Sibling features are expressions in the same `FeatureSpec`. They use the columns available at the start of that stage. Group independent calculations together, then add another specification when a calculation needs their newly created outputs.
 
 Here, `spread` and `mid` are siblings: both use the raw `ask` and `bid` columns. The next stage combines them into `relative_spread`. The final stage derives `spread_bps` from that result.
@@ -114,6 +118,36 @@ The input rows `(ask=11, bid=9)` and `(ask=22, bid=18)` both have a spread equal
 
 !!! note "A sibling cannot read a new sibling output"
     Put `spread` and `mid` in one specification, then compute `relative_spread` in the next. Adding the ratio as a third expression in the first specification would try to read columns that do not exist yet. Expressions in a single specification do not execute as sequential assignments.
+
+### Choosing one expression or several stages
+
+You can also compute the same final feature in one specification. Compose the calculations directly from the raw columns instead of referring to newly created sibling names:
+
+```python
+import polars as pl
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+quotes = pl.DataFrame({"ask": [11.0, 22.0], "bid": [9.0, 18.0]})
+spread = pl.col("ask") - pl.col("bid")
+mid = (pl.col("ask") + pl.col("bid")) / 2
+
+engineer = FeatureEngineer(
+    FeatureSpec(
+        (spread / mid) * 10_000,
+        alias="spread_bps",
+        drop=["ask", "bid"],
+    )
+)
+result = engineer.fit_transform(quotes)
+assert result.to_dict(as_series=False) == {"spread_bps": [2000.0, 2000.0]}
+```
+
+Here, `spread` and `mid` are Python variables holding Polars expressions, not newly created DataFrame columns. Polars composes them into one expression that reads `ask` and `bid`. You could also include these expressions as separate sibling outputs in the same specification while using the composed expression for `spread_bps`.
+
+Choose the form that suits your workflow. One specification is compact when you only need the final result. Separate stages make intermediate columns explicit when you want to retain them as model features, inspect their values, or refer to their names in later transformations. The restriction is only on reading a column newly created by a sibling; composing expressions from existing input columns works within one specification. These examples illustrate equivalent feature values, not a performance comparison.
+
+### Connecting the stages to a model
 
 To include the joined stages in a model, use a feature engineer containing the joined stages as a pipeline step. This standalone example keeps the relative spread as the model feature:
 

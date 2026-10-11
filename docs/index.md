@@ -83,7 +83,7 @@ A `FeatureSpec` accepts native Polars expressions, including expressions that ex
 
 ### Build dependent features in a clear sequence
 
-Real preparation often has several stages. Compute `notional` from `price * quantity`, derive `log_notional` from the new column, then remove raw inputs that the model should not consume. Separate specifications execute in order, so later stages can use the outputs of earlier ones.
+Real preparation often has several stages. Compute `notional` from `price * quantity`, derive `log_notional` from the new column, then remove raw inputs that the model should not consume. Specifications are applied in exactly their entry order in the sequence passed to `FeatureEngineer`. Each stage adds its expressions and applies its drops before the next stage receives the result, so later stages can use earlier outputs that have been retained. Lazy input builds the same ordered dependencies into a deferred query plan.
 
 Keep related independent expressions together, give outputs explicit names, and place drops after the stage that needs those columns. The feature definitions describe both the calculations and the final model input layout. The [sibling feature example](user-guide/features.md#sibling-features-and-dependent-stages) shows independent expressions grouped in one stage, their outputs combined in later stages, and the resulting feature engineer connected to a model. See [the complete prediction pipeline](getting-started.md#your-first-raw-data-prediction-pipeline).
 

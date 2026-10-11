@@ -27,8 +27,10 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         A specification or a dict of FeatureSpec keyword arguments, optionally
         in an ordered sequence mixing both forms. Dicts are unpacked into
         FeatureSpec and validated before processing input. Single definitions
-        are treated as one-element sequences. Later specifications may reference
-        earlier outputs. An empty sequence produces an identity transformation;
+        are treated as one-element sequences. Specifications are applied in the
+        supplied sequence order. Each specification adds its expressions, then
+        drops its configured columns, before the next specification is applied.
+        Later specifications may reference earlier outputs that remain present. An empty sequence produces an identity transformation;
         an empty dict is invalid. The original parameter is retained unchanged
         for estimator cloning.
     convert_pandas : bool, default=False
@@ -68,6 +70,11 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
     Notes
     -----
+    Specifications preserve the supplied sequence order in fit and transform.
+    Expressions within one specification are siblings: they read the columns
+    available before that specification, not new sibling outputs. Use later
+    specifications to reference newly created columns, or compose expressions
+    directly from existing input columns in one specification.
     The public API accepts DataFrames and LazyFrames. Lazy inputs are checked
     using schema metadata and return unevaluated plans by default. Eager input
     executes the training transformation; lazy fit validates its schema only.

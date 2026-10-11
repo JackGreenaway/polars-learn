@@ -40,7 +40,7 @@ Read the [complete documentation](https://jackgreenaway.github.io/polars-learn/)
 **Bring the power of the Polars API into the fitted model pipeline.** Define feature logic with native Polars expressions, compose it with an estimator, and reuse the same preparation during training, validation, and prediction.
 
 - **Express rich transformations without a new class for every feature.** Combine arithmetic, conditions, string and datetime operations, casts, null handling, and selectors in reusable `FeatureSpec` definitions. Polars supplies the expression engine; `polars-learn` makes that logic a pipeline component.
-- **Build features in stages.** Calculate transaction value from price and quantity, derive a logarithm from that new feature, then drop raw columns. Ordered specifications make dependencies and the final feature layout explicit.
+- **Build features in stages.** Calculate transaction value from price and quantity, derive a logarithm from that new feature, then drop raw columns. Specifications are applied in the order you supply them: each stage adds its features and applies its drops before the next stage receives the result. Later stages can therefore use retained outputs from earlier stages.
 - **Predict directly from raw observations.** Train with `pipeline.fit(raw_X, y)` and predict with `pipeline.predict(new_raw_X)`. The pipeline applies the configured feature definitions before the estimator runs.
 - **Enforce names, order, and dtypes.** Declare or learn schema contracts, select model inputs, and check the transformed schema against the fitted expectations.
 - **Use eager or lazy Polars workflows.** Prepare in-memory frames or build deferred plans, then choose where to materialize data for your estimator.
