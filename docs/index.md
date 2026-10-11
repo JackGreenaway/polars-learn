@@ -20,7 +20,7 @@ The power comes from the Polars API: its expressive column operations, selectors
 </div>
 </div>
 
-Pandas DataFrames are supported when you install `polars-learn[pandas]` and enable `convert_pandas=True` on each transformer receiving pandas input. Conversion happens behind the scenes; transformations use the Polars API and return Polars frames. See [pandas interoperability](user-guide/frames.md#optional-pandas-input) for details.
+Pandas DataFrames are supported when you install `polars-learn[pandas]` and enable `convert_pandas=True` on each transformer receiving pandas input. Conversion happens behind the scenes; transformations use the Polars API and return Polars frames by default. Pandas output is available through `set_output(transform="pandas")` for compatibility. See [pandas interoperability](user-guide/frames.md#optional-pandas-input) for details.
 
 ## Explore the documentation
 
@@ -109,7 +109,7 @@ The package preserves access to Polars' lazy execution model while giving prepar
 
 You can start with pandas DataFrames and still define your feature logic with the Polars API. Install `polars-learn[pandas]` and enable `convert_pandas=True` on transformers receiving pandas input. The package converts those frames to Polars behind the scenes, then applies the same preparation logic used for native Polars input.
 
-Outputs are Polars frames, with eager or lazy output controlled through `set_output`. This provides a path for existing pandas callers to use Polars-based preparation. See [pandas input support](user-guide/frames.md#optional-pandas-input).
+Use `set_output` to choose eager or lazy Polars output, or pandas output for compatibility. Prefer native Polars for speed and to avoid conversion overhead. This provides a path for existing pandas callers to use Polars-based preparation. See [pandas input support](user-guide/frames.md#optional-pandas-input).
 
 ### Save preparation alongside the fitted model
 

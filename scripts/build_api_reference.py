@@ -170,7 +170,8 @@ def method_doc(cls, name):
         result = (
             "self : FeaturePassthrough\n    The fitted transformer."
             if name == "fit"
-            else "X_selected : polars.DataFrame or polars.LazyFrame\n    "
+            else "X_selected : polars.DataFrame, polars.LazyFrame "
+            "or pandas.DataFrame\n    "
             "Selected unchanged columns, preserving values, names, "
             "dtypes, nulls, and row order. Output follows "
             "set_output."

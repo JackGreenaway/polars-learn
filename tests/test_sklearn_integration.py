@@ -86,7 +86,7 @@ def test_output_protocol(frame, estimator):
         estimator.set_output(transform="default").transform(frame), pl.DataFrame
     )
     with pytest.raises(ValueError, match="supported"):
-        estimator.set_output(transform="pandas")
+        estimator.set_output(transform="unsupported")
 
 
 @pytest.mark.parametrize(

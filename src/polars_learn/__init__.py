@@ -2,7 +2,8 @@
 
 ColumnSelector, FeaturePassthrough, SchemaSpec, SchemaValidator, and FeatureEngineer
 accept eager DataFrames and LazyFrames. Default output preserves input kind;
-set_output can force eager or lazy returns. FeatureSpec describes an operation
+set_output can force eager or lazy Polars returns, or pandas compatibility output.
+FeatureSpec describes an operation
 for use by FeatureEngineer. All six classes accept verbosity=0, 1, or 2.
 """
 

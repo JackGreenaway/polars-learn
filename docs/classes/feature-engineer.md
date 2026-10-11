@@ -55,7 +55,9 @@ Value-dependent errors in lazy plans surface when collected.
 Transform requires fitted input names and order and the fitted output schema.
 Default output preserves input kind. set_output(transform="polars")
 collects a DataFrame; "polars-lazy" returns a LazyFrame, which may wrap an
-evaluated result for eager input. Fit always returns self. fit_transform
+evaluated result for eager input. "pandas" converts an eager result for
+compatibility. Prefer native Polars output to avoid conversion overhead.
+Fit always returns self. fit_transform
 calls fit then transform and evaluates eager feature expressions twice.
 Pickling retains input definitions, fitted schemas, and output settings.
 Expressions use Polars' native persistence, with cloudpickle for embedded
@@ -73,13 +75,13 @@ Load trusted artifacts only and validate features after upgrading.
 | [get_feature_names_out(input_features=None)](#get-feature-names-out) | Return the fitted output column names. |
 | [get_params(deep=True)](#get-params) | Get estimator constructor parameters. |
 | [set_params(**params)](#set-params) | Set constructor parameters using scikit-learn conventions. |
-| [set_output(*, transform=None)](#set-output) | Configure native output without automatic container conversion. |
+| [set_output(*, transform=None)](#set-output) | Configure native Polars output or pandas compatibility output. |
 
 ### fit {#fit .api-method-title}
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L205">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L207">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Validate training expressions and learn input and output schemas.
 
@@ -110,7 +112,7 @@ Validate training expressions and learn input and output schemas.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L274">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L278">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
 Generate features and verify the fitted output schema.
 
@@ -123,7 +125,7 @@ Generate features and verify the fitted output schema.
 #### Returns
 
 <dl class="api-fields">
-<dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame or polars.LazyFrame</span></dt><dd><p>Retained and engineered columns in native Polars order. Default preserves input kind; set_output can force an eager or lazy container.</p></dd>
+<dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Retained and engineered columns in native Polars order. Default preserves input kind; set_output can force eager, lazy, or pandas output.</p></dd>
 </dl>
 
 #### Raises
@@ -148,7 +150,7 @@ FeatureEngineeringError, preserving their causes.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L243">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L245">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
     X,
     y=None,
     **fit_params,
@@ -167,7 +169,7 @@ Fit to training data and return its transformed representation.
 #### Returns
 
 <dl class="api-fields">
-<dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame or polars.LazyFrame</span></dt><dd><p>Result of fitting and transforming the same input. Default preserves input kind; set_output can force an eager or lazy container.</p></dd>
+<dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Result of fitting and transforming the same input. Default preserves input kind; set_output can force eager, lazy, or pandas output.</p></dd>
 </dl>
 
 </div>
@@ -176,7 +178,7 @@ Fit to training data and return its transformed representation.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L162">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_feature_names_out</span>(input_features=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L170">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_feature_names_out</span>(input_features=None)</code></pre></div>
 
 Return the fitted output column names.
 
@@ -261,14 +263,14 @@ fail at the next relevant fit or transform operation.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L195">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_output</span>(*, transform=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L203">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_output</span>(*, transform=None)</code></pre></div>
 
-Configure native output without automatic container conversion.
+Configure native Polars output or pandas compatibility output.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt><code class="api-field-name">transform</code> <span class="api-field-type">{&quot;default&quot;, &quot;polars&quot;, &quot;polars-lazy&quot;} or None, default=None</span></dt><dd><p>Default preserves the input kind. &quot;polars&quot; collects an eager DataFrame; &quot;polars-lazy&quot; returns a LazyFrame. <code>None</code> leaves the configuration unchanged. Pandas output is unsupported.</p></dd>
+<dt><code class="api-field-name">transform</code> <span class="api-field-type">{&quot;default&quot;, &quot;polars&quot;, &quot;polars-lazy&quot;, &quot;pandas&quot;} or None, default=None</span></dt><dd><p>Default preserves the input kind. &quot;polars&quot; collects an eager DataFrame; &quot;polars-lazy&quot; returns a LazyFrame. <code>None</code> leaves the configuration unchanged. &quot;pandas&quot; collects if necessary and converts the result to a pandas DataFrame. Requires the pandas extra.</p></dd>
 </dl>
 
 #### Returns
@@ -285,6 +287,11 @@ Configure native output without automatic container conversion.
 
 #### Notes
 
+Prefer native Polars output for speed and to avoid conversion overhead.
+Pandas output is provided for compatibility and uses Polars to_pandas
+defaults, including a fresh RangeIndex and dtype/null conversion.
+Conversion raises ImportError if pandas or PyArrow is unavailable.
+Input conversion remains separately controlled by convert_pandas.
 Automatic scikit-learn output wrapping and global output settings are
 bypassed to preserve native names and permitted extra columns.
 Output choices survive cloning. None leaves the current choice intact;

@@ -56,7 +56,8 @@ class FeaturePassthrough(ColumnSelector, auto_wrap_output_keys=None):
 
     Default returns preserve input kind: DataFrame input returns DataFrame and
     LazyFrame input returns an unevaluated LazyFrame. set_output can force
-    "polars" (eager) or "polars-lazy" output. Inputs are never mutated.
+    "polars" (eager), "polars-lazy", or "pandas" compatibility output.
+    Inputs are never mutated.
     Source/schema-resolution and collection errors are not wrapped.
 
     A sequential pipeline step returns only its selected columns. To retain

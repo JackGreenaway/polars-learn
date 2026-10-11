@@ -17,7 +17,7 @@ from ._utils import (
     to_polars,
     validate_verbosity,
 )
-from .types import Frame
+from .types import Frame, OutputFrame
 
 
 class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
@@ -65,7 +65,7 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
     Notes
     -----
     DataFrames return DataFrames and LazyFrames return unevaluated LazyFrames
-    by default. Use set_output to force an eager or lazy output container.
+    by default. Use set_output to force eager, lazy, or pandas output.
 
     Examples
     --------
@@ -185,7 +185,9 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
+    def fit_transform(
+        self, X: object, y: object = None, **fit_params: object
+    ) -> OutputFrame:
         """Fit and transform the same input using the configured return kind.
 
         Parameters
@@ -199,7 +201,7 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame or polars.LazyFrame
+        X_transformed : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Transformed input. Default preserves input kind; set_output can
             force an eager DataFrame or LazyFrame. Converted pandas is eager.
 
@@ -214,7 +216,7 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
             )
         return self.fit(X, y).transform(X)
 
-    def transform(self, X: object) -> Frame:
+    def transform(self, X: object) -> OutputFrame:
         """Select fitted columns, rename them, and verify output names.
 
         Parameters
@@ -226,9 +228,9 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_selected : polars.DataFrame or polars.LazyFrame
+        X_selected : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Selected columns in configured order, including renames. Default
-            preserves input kind; set_output can force eager or lazy output.
+            preserves input kind; set_output can force eager, lazy, or pandas output.
 
         Raises
         ------

@@ -7,6 +7,7 @@ All five transformers accept a `pl.LazyFrame`, including a query from `pl.scan_c
 | `"default"` (initial behavior) | DataFrame                | LazyFrame                      |
 | `"polars"`                     | DataFrame                | DataFrame; collects the result |
 | `"polars-lazy"`                | LazyFrame                | LazyFrame                      |
+| `"pandas"`                    | pandas DataFrame         | pandas DataFrame; collects and converts |
 | `None`                         | Keep the existing choice | Keep the existing choice       |
 
 ```python
@@ -41,7 +42,7 @@ Inspect lazy output with `plan.collect_schema()` for names and dtypes, and `plan
 
 ## Optional pandas input
 
-Pandas DataFrames are supported through behind-the-scenes conversion to a Polars DataFrame. Feature transformations then use the same Polars API as native input, and the output is a Polars frame. Enable conversion on each transformer that receives pandas input.
+Pandas DataFrames are supported through behind-the-scenes conversion to a Polars DataFrame. Feature transformations then use the same Polars API as native input, and the output is a Polars frame by default. Pandas output is available explicitly for compatibility. Enable conversion on each transformer that receives pandas input.
 
 Install the optional pandas dependencies:
 
@@ -65,6 +66,33 @@ assert result.columns == ["price", "quantity"]
 ```
 
 All five transformers expose `convert_pandas` and `warn_on_conversion`. Conversion is disabled by default. When enabled, it emits `PandasConversionWarning` unless `warn_on_conversion=False`. Use Polars directly to avoid conversion overhead; `fit_transform` may convert input more than once. Pandas and PyArrow are imported only when needed. The extra includes PyArrow for nullable, extension, and other dtypes that require it. Conversion follows Polars conventions, including NaN to null conversion and ignoring the pandas index. Unsupported dtypes raise; conversion does not fall back to row operations. An explicit `"polars-lazy"` output choice returns a lazy wrapper after conversion.
+
+## Pandas output for compatibility
+
+Prefer native Polars input and output for speed: it keeps preparation in Polars and avoids conversion overhead. Use `set_output(transform="pandas")` when an existing consumer needs a pandas DataFrame. All five transformers support this option on `transform` and `fit_transform`; feature calculations and schema checks still happen in Polars.
+
+Install `polars-learn[pandas]` using the commands in [Optional pandas input](#optional-pandas-input). Pandas output requires pandas and PyArrow. You do not need `convert_pandas=True` when your input is already Polars; that flag controls pandas **input** independently.
+
+```python
+import pandas as pd
+import polars as pl
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+raw = pl.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
+engineer = FeatureEngineer(
+    FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")
+).set_output(transform="pandas")
+
+result = engineer.fit_transform(raw.lazy())
+assert isinstance(result, pd.DataFrame)
+assert result["notional"].tolist() == [20.0, 60.0]
+assert result.columns.tolist() == ["price", "quantity", "notional"]
+```
+
+Lazy input is collected before conversion to pandas. `fit` still returns the transformer and does not collect lazy rows merely because pandas output is configured. Conversion uses [Polars `to_pandas()` defaults](https://docs.pola.rs/api/python/stable/reference/dataframe/api/polars.DataFrame.to_pandas.html): names and row order are retained, the result has a fresh RangeIndex, and dtypes follow pandas conversion conventions. For example, a nullable integer column may become a floating-point column with NaN values. The original pandas index is not restored.
+
+Keep intermediate pipeline steps in Polars and request pandas at the final preparation step when possible. If you configure an entire multi-step pipeline to produce pandas, enable `convert_pandas=True` on each native transformer receiving the previous step's pandas output; repeated conversions add overhead. Global scikit-learn output settings remain bypassed; configure these transformers or their pipeline explicitly with `set_output`.
 
 ## Choosing an execution boundary
 

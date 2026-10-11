@@ -14,7 +14,7 @@ from sklearn.utils.validation import (
 
 from ._serialization import reduce_object
 from .exceptions import PandasConversionWarning
-from .types import FeatureNames, Frame, OutputMode, Schema
+from .types import FeatureNames, Frame, OutputFrame, OutputMode, Schema
 
 
 def validate_verbosity(verbosity: int) -> None:
@@ -128,7 +128,7 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
     def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Any:
         """Bridge sklearn's ndarray annotation to native container overrides.
 
-        Concrete subclasses provide precisely typed Polars implementations.
+        Concrete subclasses provide typed Polars and pandas output implementations.
         sklearn's mixin supports non-array outputs at runtime.
         """
         return cast(Any, super()).fit_transform(X, y, **fit_params)
@@ -150,13 +150,21 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
         """Execute an explicitly requested eager result."""
         return result.collect()
 
-    def _finish(self, result: Frame) -> Frame:
+    def _finish(self, result: Frame) -> OutputFrame:
         mode = getattr(self, "_sklearn_output_config", {}).get("transform", "default")
-        if mode == "polars" and isinstance(result, pl.LazyFrame):
+        if mode in ("polars", "pandas") and isinstance(result, pl.LazyFrame):
             result = self._collect(result)
         elif mode == "polars-lazy" and isinstance(result, pl.DataFrame):
             result = result.lazy()
         self._report_frame(result, stage="Transform complete")
+        if mode == "pandas":
+            try:
+                return cast(pl.DataFrame, result).to_pandas()
+            except ImportError as exc:
+                raise ImportError(
+                    "Pandas output requires pandas and PyArrow; "
+                    "install polars-learn[pandas]."
+                ) from exc
         return result
 
     def get_feature_names_out(
@@ -193,14 +201,15 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
 
     # sklearn exposes set_output as an available_if descriptor.
     def set_output(self, *, transform: OutputMode | None = None) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride, reportIncompatibleVariableOverride]
-        """Configure native output without automatic container conversion.
+        """Configure native Polars output or pandas compatibility output.
 
         Parameters
         ----------
-        transform : {"default", "polars", "polars-lazy"} or None, default=None
+        transform : {"default", "polars", "polars-lazy", "pandas"} or None, default=None
             Default preserves the input kind. "polars" collects an eager
             DataFrame; "polars-lazy" returns a LazyFrame. ``None`` leaves
-            the configuration unchanged. Pandas output is unsupported.
+            the configuration unchanged. "pandas" collects if necessary and converts
+            the result to a pandas DataFrame. Requires the pandas extra.
 
         Returns
         -------
@@ -214,6 +223,11 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
 
         Notes
         -----
+        Prefer native Polars output for speed and to avoid conversion overhead.
+        Pandas output is provided for compatibility and uses Polars to_pandas
+        defaults, including a fresh RangeIndex and dtype/null conversion.
+        Conversion raises ImportError if pandas or PyArrow is unavailable.
+        Input conversion remains separately controlled by convert_pandas.
         Automatic scikit-learn output wrapping and global output settings are
         bypassed to preserve native names and permitted extra columns.
         Output choices survive cloning. None leaves the current choice intact;
@@ -221,9 +235,10 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
         does not collect lazy rows. Forcing lazy output from eager input may
         wrap an already evaluated result; use lazy input to defer evaluation.
         """
-        if transform not in (None, "default", "polars", "polars-lazy"):
+        if transform not in (None, "default", "polars", "polars-lazy", "pandas"):
             raise ValueError(
-                "Only 'default', 'polars', and 'polars-lazy' output are supported."
+                "Only 'default', 'polars', 'polars-lazy', and 'pandas' "
+                "output are supported."
             )
         if transform is not None:
             self._sklearn_output_config = {"transform": transform}

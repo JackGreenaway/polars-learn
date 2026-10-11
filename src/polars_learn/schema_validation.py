@@ -10,7 +10,7 @@ from sklearn.utils.validation import (
 
 from ._utils import NativeTransformer, frame_schema, to_polars
 from .exceptions import SchemaValidationError
-from .types import ExtraColumnPolicy, Frame, Schema, ValidationMode
+from .types import ExtraColumnPolicy, Frame, OutputFrame, Schema, ValidationMode
 
 
 class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
@@ -59,7 +59,7 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
     Notes
     -----
     DataFrames return DataFrames and LazyFrames return unevaluated LazyFrames
-    by default. Use set_output to force an eager or lazy output container.
+    by default. Use set_output to force eager, lazy, or pandas output.
     Required dtypes must match exactly; there is no casting. Required output
     columns follow schema key order, then preserved extras follow input order.
     Transform requires fitting and exact fitted output names/order, including
@@ -165,7 +165,9 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
+    def fit_transform(
+        self, X: object, y: object = None, **fit_params: object
+    ) -> OutputFrame:
         """Fit and transform the same input using the configured return kind.
 
         Parameters
@@ -179,7 +181,7 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame or polars.LazyFrame
+        X_transformed : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Transformed input. Default preserves input kind; set_output can
             force an eager DataFrame or LazyFrame. Converted pandas is eager.
 
@@ -224,7 +226,7 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
             return frame.select(ordered)
         return frame.select(expected_names)
 
-    def transform(self, X: object) -> Frame:
+    def transform(self, X: object) -> OutputFrame:
         """Check exact required dtypes and return the fitted output columns.
 
         Parameters
@@ -235,9 +237,10 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_validated : polars.DataFrame or polars.LazyFrame
+        X_validated : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Required columns in schema order, then preserved extras in input
-            order. Default preserves input kind; set_output can force the kind.
+            order. Default preserves input kind; set_output can force eager, lazy,
+            or pandas output.
 
         Raises
         ------
@@ -377,7 +380,8 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
     Explicit eager output wraps Polars cast errors in SchemaValidationError;
     collecting a returned LazyFrame can raise native Polars exceptions.
     Default output preserves input kind. set_output can force "polars" (eager)
-    or "polars-lazy" output. With enforced order and preserved extras, output
+    or "polars-lazy" output, or pandas output for compatibility.
+    With enforced order and preserved extras, output
     keeps input order; disabling order enforcement puts required columns first.
 
     Examples
@@ -464,7 +468,9 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
+    def fit_transform(
+        self, X: object, y: object = None, **fit_params: object
+    ) -> OutputFrame:
         """Fit to training data and return its transformed representation.
 
         Parameters
@@ -480,9 +486,9 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame or polars.LazyFrame
+        X_transformed : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Result of fitting and transforming the same input. Default preserves
-            input kind; set_output can force an eager or lazy container.
+            input kind; set_output can force eager, lazy, or pandas output.
 
         See Also
         --------
@@ -503,7 +509,7 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
                 f"Lazy schema validation failed: {exc}"
             ) from exc
 
-    def transform(self, X: object) -> Frame:
+    def transform(self, X: object) -> OutputFrame:
         """Validate the learned schema and normalise permitted differences.
 
         Parameters
@@ -514,7 +520,7 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_validated : polars.DataFrame or polars.LazyFrame
+        X_validated : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Validated input with any configured casts, ordering, and extra
             column policy applied. Default preserves input kind; set_output can
             force the return container. The original input is never mutated.

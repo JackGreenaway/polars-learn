@@ -36,9 +36,13 @@ sparse arrays are unsupported. Original inputs are never mutated.
 | Initial setting or `set_output(transform="default")` | DataFrame | LazyFrame |
 | `set_output(transform="polars")` | DataFrame | DataFrame, collected by the transformer |
 | `set_output(transform="polars-lazy")` | LazyFrame | LazyFrame |
+| `set_output(transform="pandas")` | pandas DataFrame, converted from Polars | pandas DataFrame, collected and converted |
 
-`set_output(transform=None)` keeps the current choice. `"pandas"` output is
-unsupported. Global scikit-learn output settings do not change these native
+`set_output(transform=None)` keeps the current choice. `"pandas"` output requires
+the optional pandas extra and uses Polars `to_pandas()` defaults. Prefer native
+Polars for speed and to avoid conversion overhead; pandas output is a compatibility
+option. Input conversion remains separately controlled by `convert_pandas`.
+Global scikit-learn output settings do not change these native
 transformers' returns. Explicit output choices survive cloning.
 
 Default return type follows the input of each transform call, not the input
@@ -82,12 +86,12 @@ Conversion follows Polars' pandas conversion semantics and discards the index.
 | Method | Return | Behavior |
 | --- | --- | --- |
 | `fit(X, y=None)` | `self` | Validate or learn the class-specific contract. Ignores `y`. Repeated fitting replaces learned state after validation succeeds. |
-| `transform(X)` | DataFrame or LazyFrame | Apply a fitted transformer; output follows the [Input and Output](#input-and-output) configuration. |
-| `fit_transform(X, y=None, **fit_params)` | DataFrame or LazyFrame | Call `fit` then `transform`. Extra keyword parameters are unsupported and raise `TypeError`. |
+| `transform(X)` | DataFrame, LazyFrame, or pandas DataFrame | Apply a fitted transformer; output follows the [Input and Output](#input-and-output) configuration. |
+| `fit_transform(X, y=None, **fit_params)` | DataFrame, LazyFrame, or pandas DataFrame | Call `fit` then `transform`. Extra keyword parameters are unsupported and raise `TypeError`. |
 | `get_feature_names_out(input_features=None)` | NumPy object array of strings | Return a copy of fitted output names. If supplied, input names must exactly match the fitted input names and order. |
 | `get_params(deep=True)` | dict | Read constructor parameters using scikit-learn's estimator API. Output configuration is set separately with `set_output`. |
 | `set_params(**params)` | `self` | Update constructor parameters. Does not validate immediately or clear fitted state; refit after contract changes. |
-| `set_output(*, transform=None)` | `self` | Choose the output container for subsequent transforms. Does not fit, evaluate data, or change column names. |
+| `set_output(*, transform=None)` | `self` | Choose native Polars or pandas compatibility output for subsequent transforms. Configuration does not fit or evaluate data; transformation collects when eager output is requested. |
 
 `transform` and `get_feature_names_out` require fitting and raise
 `sklearn.exceptions.NotFittedError` if fitted state is unavailable.
@@ -250,7 +254,7 @@ assert contract.fit_transform(X).columns == ["x"]
 ## SchemaValidator
 
 <!-- BEGIN SIGNATURE:SchemaValidator -->
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L317">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L320">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
     mode=&#x27;strict&#x27;,
     *,
     allow_extra_columns=False,
@@ -318,7 +322,7 @@ assert validator.get_feature_names_out().tolist() == ["x"]
 ## FeatureSpec
 
 <!-- BEGIN SIGNATURE:FeatureSpec -->
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L267">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L269">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
     expression,
     *,
     alias=None,

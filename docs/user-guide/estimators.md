@@ -33,7 +33,7 @@ predictions = pipeline.predict(X.lazy())
 assert predictions.shape == (3,)
 ```
 
-Supported input is Polars DataFrames and LazyFrames, plus explicitly enabled pandas DataFrames. NumPy arrays, Series, Python lists, and sparse arrays are not accepted. These transformers bypass scikit-learn's automatic output wrapping and global output-container settings; configure each native transformer with `set_output`. There is no automatic conversion to NumPy or pandas output.
+Supported input is Polars DataFrames and LazyFrames, plus explicitly enabled pandas DataFrames. NumPy arrays, Series, Python lists, and sparse arrays are not accepted. These transformers bypass scikit-learn's automatic output wrapping and global output-container settings; configure each native transformer with `set_output`. There is no automatic conversion to NumPy. Request pandas compatibility output explicitly with `set_output(transform="pandas")`.
 
 Cloning keeps constructor parameters and explicit output settings, and discards fitted state. `y` is accepted for estimator compatibility and ignored. Additional `fit_transform` keyword parameters, including `sample_weight`, are unsupported. Refit after changing parameters that affect the fitted contract; `set_params` does not reset fitted state. Invalid settings are rechecked when processing input.
 
@@ -54,7 +54,7 @@ This shared interface describes how steps compose. The final estimator must also
 
 ## Fitting, cloning, and changing parameters
 
-All five transformers expose `get_params`, `set_params`, `fit`, `transform`, `fit_transform`, `get_feature_names_out`, and `set_output`. `FeatureSpec` is an operation description rather than an estimator. `fit` returns the transformer, while transformation returns a Polars frame. Calling `transform` before fitting raises `NotFittedError`.
+All five transformers expose `get_params`, `set_params`, `fit`, `transform`, `fit_transform`, `get_feature_names_out`, and `set_output`. `FeatureSpec` is an operation description rather than an estimator. `fit` returns the transformer, while transformation returns a Polars frame by default or a pandas DataFrame when requested. Calling `transform` before fitting raises `NotFittedError`.
 
 Scikit-learn cloning copies constructor configuration and explicit output settings, then discards learned state. Use complete pipelines in cross-validation so each fold fits its own training-dependent preprocessing. Keep the target out of the feature frame. `set_params` changes configuration without immediately validating it or clearing learned state; refit after changing the contract. A failed refit may leave earlier fitted state available, so use a fresh instance when old state must be discarded.
 

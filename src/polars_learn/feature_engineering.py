@@ -12,7 +12,7 @@ from sklearn.utils.validation import (
 from ._utils import NativeTransformer, frame_schema, to_polars
 from .exceptions import FeatureEngineeringError
 from .feature_spec import FeatureSpec
-from .types import FeatureSpecConfig, Frame, Schema
+from .types import FeatureSpecConfig, Frame, OutputFrame, Schema
 
 # Ordinary dict variables have heterogeneous values; validate their kwargs at runtime.
 _FeatureDefinition: TypeAlias = FeatureSpec | FeatureSpecConfig | dict[str, Any]
@@ -83,7 +83,9 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     Transform requires fitted input names and order and the fitted output schema.
     Default output preserves input kind. set_output(transform="polars")
     collects a DataFrame; "polars-lazy" returns a LazyFrame, which may wrap an
-    evaluated result for eager input. Fit always returns self. fit_transform
+    evaluated result for eager input. "pandas" converts an eager result for
+    compatibility. Prefer native Polars output to avoid conversion overhead.
+    Fit always returns self. fit_transform
     calls fit then transform and evaluates eager feature expressions twice.
     Pickling retains input definitions, fitted schemas, and output settings.
     Expressions use Polars' native persistence, with cloudpickle for embedded
@@ -240,7 +242,9 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
+    def fit_transform(
+        self, X: object, y: object = None, **fit_params: object
+    ) -> OutputFrame:
         """Fit to training data and return its transformed representation.
 
         Parameters
@@ -256,9 +260,9 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame or polars.LazyFrame
+        X_transformed : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Result of fitting and transforming the same input. Default preserves
-            input kind; set_output can force an eager or lazy container.
+            input kind; set_output can force eager, lazy, or pandas output.
 
         See Also
         --------
@@ -271,7 +275,7 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
             )
         return self.fit(X, y).transform(X)
 
-    def transform(self, X: object) -> Frame:
+    def transform(self, X: object) -> OutputFrame:
         """Generate features and verify the fitted output schema.
 
         Parameters
@@ -283,9 +287,9 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame or polars.LazyFrame
+        X_transformed : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Retained and engineered columns in native Polars order. Default
-            preserves input kind; set_output can force an eager or lazy container.
+            preserves input kind; set_output can force eager, lazy, or pandas output.
 
         Raises
         ------

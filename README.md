@@ -25,7 +25,7 @@ Prepare Polars data for estimators that implement the scikit-learn interface, wi
 
 The power of these transformations comes from the **Polars API**: its column expressions, selectors, and eager and lazy execution. `polars-learn` wraps those capabilities in reusable estimator-style components, keeping your Polars feature logic inside the fitted pipeline.
 
-**Pandas input is supported.** Install `polars-learn[pandas]` and set `convert_pandas=True` on each transformer receiving pandas input. Pandas DataFrames are converted to Polars behind the scenes; transformations run through the Polars API and return Polars frames. Conversion is opt-in and disabled by default.
+**Pandas input and output are supported for compatibility.** Install `polars-learn[pandas]` and set `convert_pandas=True` on each transformer receiving pandas input. Pandas DataFrames are converted to Polars behind the scenes; transformations run through the Polars API and return Polars frames by default. Request `set_output(transform="pandas")` for pandas compatibility output. Conversion is opt-in and disabled by default. Prefer native Polars for speed and to avoid conversion overhead. See [pandas output](docs/user-guide/frames.md#pandas-output-for-compatibility) for dependencies, dtype behavior, and pipeline guidance.
 
 **Put feature preparation inside the pipeline.** Define your Polars expressions once with `FeatureEngineer`, train with `pipeline.fit(raw_X, y)`, and predict with `pipeline.predict(new_raw_X)`. The pipeline generates the features before the model runs, using the same definitions and execution order in both paths. You can keep feature preparation together with the model instead of maintaining separate feature-building functions and remembering to call them before each prediction.
 
@@ -44,7 +44,7 @@ Read the [complete documentation](https://jackgreenaway.github.io/polars-learn/)
 - **Predict directly from raw observations.** Train with `pipeline.fit(raw_X, y)` and predict with `pipeline.predict(new_raw_X)`. The pipeline applies the configured feature definitions before the estimator runs.
 - **Enforce names, order, and dtypes.** Declare or learn schema contracts, select model inputs, and check the transformed schema against the fitted expectations.
 - **Use eager or lazy Polars workflows.** Prepare in-memory frames or build deferred plans, then choose where to materialize data for your estimator.
-- **Accept pandas input.** Enable `convert_pandas=True` with the pandas extra installed. Frames are converted to Polars behind the scenes, transformations use the Polars API, and outputs are Polars frames.
+- **Accept pandas input.** Enable `convert_pandas=True` with the pandas extra installed. Frames are converted to Polars behind the scenes, transformations use the Polars API, and outputs are Polars frames by default. Use `set_output(transform="pandas")` for compatibility with pandas consumers.
 - **Carry preparation with the model.** Clone components for cross-validation, inspect fitted feature names and schemas, and save the fitted pipeline with its preparation logic and estimator.
 
 `FeatureEngineer` executes expressions and records schema expectations. Add fitted preprocessing steps for transformations that must learn and retain training statistics. Read [why use it?](docs/index.md#why-use-it) for the full breakdown and workflow links.
@@ -292,6 +292,7 @@ All five transformers accept a `pl.LazyFrame`, including a query from `pl.scan_c
 | `"default"` (initial behavior) | DataFrame                | LazyFrame                      |
 | `"polars"`                     | DataFrame                | DataFrame; collects the result |
 | `"polars-lazy"`                | LazyFrame                | LazyFrame                      |
+| `"pandas"`                    | pandas DataFrame         | pandas DataFrame; collects and converts |
 | `None`                         | Keep the existing choice | Keep the existing choice       |
 
 ```python
@@ -359,7 +360,7 @@ predictions = pipeline.predict(X.lazy())
 assert predictions.shape == (3,)
 ```
 
-Supported input is Polars DataFrames and LazyFrames, plus explicitly enabled pandas DataFrames. NumPy arrays, Series, Python lists, and sparse arrays are not accepted. These transformers bypass scikit-learn's automatic output wrapping and global output-container settings; configure each native transformer with `set_output`. There is no automatic conversion to NumPy or pandas output.
+Supported input is Polars DataFrames and LazyFrames, plus explicitly enabled pandas DataFrames. NumPy arrays, Series, Python lists, and sparse arrays are not accepted. These transformers bypass scikit-learn's automatic output wrapping and global output-container settings; configure each native transformer with `set_output`. There is no automatic conversion to NumPy. Request pandas compatibility output explicitly with `set_output(transform="pandas")`.
 
 Cloning keeps constructor parameters and explicit output settings, and discards fitted state. `y` is accepted for estimator compatibility and ignored. Additional `fit_transform` keyword parameters, including `sample_weight`, are unsupported. Refit after changing parameters that affect the fitted contract; `set_params` does not reset fitted state. Invalid settings are rechecked when processing input.
 
