@@ -1,6 +1,6 @@
 [project]
 name = "polars-learn"
-version = "0.1.3"
+version = "0.1.4"
 description = "Native Polars feature engineering and schema validation for scikit-learn style estimators"
 readme = "README.md"
 requires-python = ">=3.11"
