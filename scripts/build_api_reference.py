@@ -161,50 +161,6 @@ def method_doc(cls, name):
         fail at the next relevant fit or transform operation.
         """
     doc = inspect.getdoc(getattr(cls, name)) or ""
-    if cls.__name__ == "FeaturePassthrough" and name in {"fit", "transform"}:
-        verb = (
-            "Validate selected columns and record feature names."
-            if name == "fit"
-            else "Select fitted columns unchanged in configured order."
-        )
-        result = (
-            "self : FeaturePassthrough\n    The fitted transformer."
-            if name == "fit"
-            else "X_selected : polars.DataFrame, polars.LazyFrame "
-            "or pandas.DataFrame\n    "
-            "Selected unchanged columns, preserving values, names, "
-            "dtypes, nulls, and row order. Output follows "
-            "set_output."
-        )
-        doc = f"""{verb}
-
-Parameters
-----------
-X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
-    Input containing all selected columns. Other columns are omitted from output.
-    Input order and dtypes may differ. Pandas requires convert_pandas=True.
-"""
-        if name == "fit":
-            doc += (
-                "y : object, default=None\n"
-                "    Ignored; accepted for estimator compatibility.\n"
-            )
-        doc += (
-            f"\nReturns\n-------\n{result}\n\nRaises\n------\n"
-            "TypeError\n    Unsupported input, column, or option types.\n"
-            "ValueError\n    Missing selected columns, duplicate names, "
-            "or invalid configuration.\n"
-        )
-        if name == "transform":
-            doc += (
-                "sklearn.exceptions.NotFittedError\n"
-                "    Fit has not completed successfully.\n"
-            )
-        doc += (
-            "\nNotes\n-----\nLazy metadata checks do not evaluate rows. "
-            "Source and collection failures propagate from Polars. "
-            "Dtypes are not validated.\n"
-        )
     return doc
 
 

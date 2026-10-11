@@ -16,6 +16,25 @@ from .types import ExtraColumnPolicy, Frame, OutputFrame, Schema, ValidationMode
 class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
     """Describe a fixed contract for Polars DataFrames and LazyFrames.
 
+    Use this transformer when your application already defines the required
+    column names and dtypes. Both ``fit`` and ``transform`` check that explicit
+    contract; required dtypes must match exactly and are never cast.
+    Output places required columns in schema-key order and handles additional
+    columns according to the extra-column options. ``fit`` records the output
+    layout, including preserved extras, which later transformations must match.
+    Choose ``SchemaValidator`` instead to learn the contract from training data
+    or permit configured dtype conversions. Neither class checks business
+    rules such as allowed value ranges or required non-null values.
+
+    Polars is the execution engine. Native DataFrames and LazyFrames are
+    accepted; pandas input requires ``convert_pandas=True`` and is converted
+    behind the scenes. Output is native Polars by default, including an eager
+    Polars frame for converted pandas input. Use
+    ``set_output(transform="pandas")`` for compatibility output; install
+    ``polars-learn[pandas]`` for pandas and PyArrow. Lazy output defers row
+    execution, while eager Polars or pandas output collects during transform.
+    Prefer native Polars input/output for speed and to avoid conversion overhead.
+
     Parameters
     ----------
     schema : dict of str to polars.DataType
@@ -129,6 +148,12 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
     def fit(self, X: object, y: object = None) -> Self:
         """Validate the explicit contract and record fitted output names.
 
+        Call before transforming to verify the declared contract and record the
+        output layout. Checks required names, exact dtypes, ordering, and allowed
+        extras, then stores the explicit schema and output names. The schema comes
+        from the constructor, not from inferred training dtypes. Preserved training
+        extras become part of the output-name contract. No values are cast.
+
         Parameters
         ----------
         X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
@@ -169,6 +194,19 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
         self, X: object, y: object = None, **fit_params: object
     ) -> OutputFrame:
         """Fit and transform the same input using the configured return kind.
+
+        Convenience method for preparing training data: calls ``fit(X, y)`` and
+        then ``transform(X)`` on the same input. This updates fitted state and
+        returns the prepared frame. The target is ignored and extra fit parameters
+        are unsupported. See ``fit`` for the class-specific learned contract and
+        ``transform`` for validation and output behavior.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
 
         Parameters
         ----------
@@ -228,6 +266,19 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
 
     def transform(self, X: object) -> OutputFrame:
         """Check exact required dtypes and return the fitted output columns.
+
+        Call after fitting to enforce the application's fixed contract on new data.
+        Checks required names, exact dtypes, configured order, and extra-column
+        policies, then selects required columns in schema-key order. The output
+        names and order must match fitting, including preserved extras. No casting
+        occurs and the original input is never modified.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
 
         Parameters
         ----------
@@ -319,6 +370,25 @@ def _lossless_float_cast(series: pl.Series) -> pl.Series:
 
 class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
     """Learn a schema and validate subsequent Polars DataFrames or LazyFrames.
+
+    Use this transformer when training data defines your model's input contract.
+    ``fit`` records every training column's name, order, and Polars dtype;
+    ``transform`` checks new data against that learned schema and handles
+    permitted casts, extra columns, and ordering according to your options.
+    Strict mode rejects dtype changes, semi-strict allows defined lossless
+    widening, and permissive attempts Polars casts that may lose information.
+    Missing required columns always fail. This validates structure and dtype
+    compatibility, not business meaning, nullability, or feature distributions.
+    Choose ``SchemaSpec`` when the required schema is already known.
+
+    Polars is the execution engine. Native DataFrames and LazyFrames are
+    accepted; pandas input requires ``convert_pandas=True`` and is converted
+    behind the scenes. Output is native Polars by default, including an eager
+    Polars frame for converted pandas input. Use
+    ``set_output(transform="pandas")`` for compatibility output; install
+    ``polars-learn[pandas]`` for pandas and PyArrow. Lazy output defers row
+    execution, while eager Polars or pandas output collects during transform.
+    Prefer native Polars input/output for speed and to avoid conversion overhead.
 
     Parameters
     ----------
@@ -437,6 +507,12 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
     def fit(self, X: object, y: object = None) -> Self:
         """Learn column names, order, and dtypes without changing the input.
 
+        Call on training data to establish the schema used by later transforms.
+        Reads column metadata and records every input column as required, in its
+        training order. It does not cast values, learn nullability, or evaluate lazy
+        rows. A successful refit replaces the previous learned contract; ``y`` is
+        ignored because validation does not learn from the target.
+
         Parameters
         ----------
         X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
@@ -472,6 +548,19 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
         self, X: object, y: object = None, **fit_params: object
     ) -> OutputFrame:
         """Fit to training data and return its transformed representation.
+
+        Convenience method for preparing training data: calls ``fit(X, y)`` and
+        then ``transform(X)`` on the same input. This updates fitted state and
+        returns the prepared frame. The target is ignored and extra fit parameters
+        are unsupported. See ``fit`` for the class-specific learned contract and
+        ``transform`` for validation and output behavior.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
 
         Parameters
         ----------
@@ -511,6 +600,20 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
 
     def transform(self, X: object) -> OutputFrame:
         """Validate the learned schema and normalise permitted differences.
+
+        Call after fitting to validate new observations before feature engineering
+        or prediction. Checks all required columns against ``schema_``, applies the
+        chosen dtype policy, and handles permitted extras and ordering. The fitted
+        schema remains unchanged. Structural errors fail during this call; lazy
+        value-dependent cast checks run when the resulting query is collected.
+        The original input is never modified.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
 
         Parameters
         ----------

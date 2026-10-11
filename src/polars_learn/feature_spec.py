@@ -23,6 +23,23 @@ from .types import Frame, OutputFrame
 class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
     """Select and optionally rename columns in a Polars DataFrame or LazyFrame.
 
+    Use this transformer to define the exact feature names and column order
+    passed to a model. ``fit`` checks selected names and records the layout;
+    ``transform`` selects those columns in the supplied order, applies optional
+    renames, and checks the output names against fitting. Other columns are
+    omitted. Values are unchanged and dtypes are not validated or cast.
+    Choose ``FeaturePassthrough`` when renaming is unnecessary, or add a schema
+    validator when input dtypes must be enforced.
+
+    Polars is the execution engine. Native DataFrames and LazyFrames are
+    accepted; pandas input requires ``convert_pandas=True`` and is converted
+    behind the scenes. Output is native Polars by default, including an eager
+    Polars frame for converted pandas input. Use
+    ``set_output(transform="pandas")`` for compatibility output; install
+    ``polars-learn[pandas]`` for pandas and PyArrow. Lazy output defers row
+    execution, while eager Polars or pandas output collects during transform.
+    Prefer native Polars input/output for speed and to avoid conversion overhead.
+
     Parameters
     ----------
     columns : sequence of str
@@ -144,6 +161,12 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
     def fit(self, X: object, y: object = None) -> Self:
         """Check selected columns and record input and output names.
 
+        Call before transforming to establish the selected output layout. Checks
+        that all configured columns exist and records all input names plus the
+        selected output names, including any renames. Extra input columns are
+        allowed, input order may differ, and no training statistics are learned.
+        This inherited method also fits ``FeaturePassthrough``, which has no renames.
+
         Parameters
         ----------
         X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
@@ -154,8 +177,8 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        self : ColumnSelector
-            Fitted selector. Dtypes are not learned or validated.
+        self : ColumnSelector or FeaturePassthrough
+            The fitted selection transformer. Dtypes are not learned or validated.
 
         Raises
         ------
@@ -190,6 +213,19 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
     ) -> OutputFrame:
         """Fit and transform the same input using the configured return kind.
 
+        Convenience method for preparing training data: calls ``fit(X, y)`` and
+        then ``transform(X)`` on the same input. This updates fitted state and
+        returns the prepared frame. The target is ignored and extra fit parameters
+        are unsupported. See ``fit`` for the class-specific learned contract and
+        ``transform`` for validation and output behavior.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
+
         Parameters
         ----------
         X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
@@ -218,6 +254,19 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
 
     def transform(self, X: object) -> OutputFrame:
         """Select fitted columns, rename them, and verify output names.
+
+        Call after fitting to prepare the selected model inputs. Selects columns
+        in configured order, optionally renames them, and checks the resulting
+        names against the fitted layout. Unselected columns are omitted; dtype
+        changes are accepted. For ``FeaturePassthrough``, selection is unchanged
+        and no renames occur. The original input is never modified.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
 
         Parameters
         ----------
@@ -268,6 +317,16 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
 
 class FeatureSpec:
     """Describe a native Polars feature operation.
+
+    Use this class to describe a reusable feature calculation for
+    ``FeatureEngineer``. Construction validates and stores the expressions;
+    it does not execute them, fit on data, or implement ``transform``.
+    The engineer applies the expressions with Polars ``with_columns``, then
+    removes the configured ``drop`` columns. Existing columns can be replaced.
+    Expressions within one specification read the same stage's input, so they
+    cannot read columns newly created by siblings. Compose expressions directly
+    from existing columns, or use later specifications for dependent features.
+    The engineer applies specifications in the order you supply them.
 
     Parameters
     ----------

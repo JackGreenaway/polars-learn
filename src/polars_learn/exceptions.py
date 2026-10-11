@@ -37,7 +37,14 @@ class PandasConversionWarning(UserWarning):
 
 
 class SerializationError(PolarsLearnError):
-    """Serialization or restoration failed; the original error is preserved."""
+    """Signal that a model component could not be saved or restored.
+
+    Raised when expression serialization or saved-state restoration fails,
+    including incompatible state after a dependency change. The original
+    exception is retained as the cause so callers can inspect the failure.
+    Catch this when reporting artifact loading/saving errors; a version
+    mismatch alone emits InconsistentVersionWarning rather than this error.
+    """
 
 
 class InconsistentVersionWarning(UserWarning):

@@ -3,7 +3,7 @@
 <!-- BEGIN GENERATED REFERENCE -->
 ## Reference
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L269">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L318">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
     expression,
     *,
     alias=None,
@@ -15,6 +15,16 @@
 <div class="api-class-body" markdown="1">
 
 Describe a native Polars feature operation.
+
+Use this class to describe a reusable feature calculation for
+`FeatureEngineer`. Construction validates and stores the expressions;
+it does not execute them, fit on data, or implement `transform`.
+The engineer applies the expressions with Polars `with_columns`, then
+removes the configured `drop` columns. Existing columns can be replaced.
+Expressions within one specification read the same stage's input, so they
+cannot read columns newly created by siblings. Compose expressions directly
+from existing columns, or use later specifications for dependent features.
+The engineer applies specifications in the order you supply them.
 
 ### Parameters
 

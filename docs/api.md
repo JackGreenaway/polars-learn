@@ -4,6 +4,19 @@ Import public classes and exceptions from `polars_learn`. This reference describ
 the implementation in this checkout. See the [getting started guide](getting-started.md) for complete
 installation and a complete prediction workflow. See [Development](development.md) for repository setup and documentation builds.
 
+## Choosing a component
+
+| What you want to do | Component | How it works |
+| --- | --- | --- |
+| Describe a feature calculation | `FeatureSpec` | Stores Polars expressions, optional aliases, and drops; execution happens in `FeatureEngineer`. |
+| Apply calculations inside a model pipeline | `FeatureEngineer` | Applies specs in entry order, records input/output schema during fit, and replays and checks preparation during transform. |
+| Enforce an application-defined schema | `SchemaSpec` | Checks exact required names and dtypes without casting; records the fitted output layout. |
+| Enforce the training data's schema | `SchemaValidator` | Learns names/order/dtypes during fit, then validates and performs only the casts allowed by its mode. |
+| Select and optionally rename model inputs | `ColumnSelector` | Selects configured columns in entry order and checks fitted output names; values are unchanged. |
+| Retain selected features unchanged | `FeaturePassthrough` | Uses the same selection behavior without renaming; useful for unchanged branches. |
+
+The class and method references below are generated from the source docstrings. You can also use `help(FeatureEngineer)` or `help(FeatureEngineer.transform)` in Python to read the same behavior details locally. Each class explains when to use it, what fitting records, how transformation works, and its input/output choices.
+
 ## Class reference index
 
 Choose a class for its purpose, input/output examples, constructor parameters, attributes, and methods. The same pages are listed under **Classes** in the documentation navigation.
@@ -254,7 +267,7 @@ assert contract.fit_transform(X).columns == ["x"]
 ## SchemaValidator
 
 <!-- BEGIN SIGNATURE:SchemaValidator -->
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L320">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L371">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
     mode=&#x27;strict&#x27;,
     *,
     allow_extra_columns=False,
@@ -322,7 +335,7 @@ assert validator.get_feature_names_out().tolist() == ["x"]
 ## FeatureSpec
 
 <!-- BEGIN SIGNATURE:FeatureSpec -->
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L269">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L318">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
     expression,
     *,
     alias=None,

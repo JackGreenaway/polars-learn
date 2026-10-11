@@ -8,6 +8,24 @@ from .feature_spec import ColumnSelector
 class FeaturePassthrough(ColumnSelector, auto_wrap_output_keys=None):
     """Pass explicitly selected columns through without changing their contents.
 
+    Use this transformer to retain a named subset of features that need no
+    calculation, renaming, or casting. ``fit`` checks the selected names and
+    records the layout; ``transform`` returns only those columns in the order
+    you supply them. It inherits this selection behavior from ``ColumnSelector``
+    and exposes no rename option. Native Polars values and dtypes are preserved.
+    In a sequential pipeline, unselected columns are removed. To combine these
+    unchanged features with a separate transformed branch, use an eager
+    ``ColumnTransformer``. Choose ``ColumnSelector`` if you also need renaming.
+
+    Polars is the execution engine. Native DataFrames and LazyFrames are
+    accepted; pandas input requires ``convert_pandas=True`` and is converted
+    behind the scenes. Output is native Polars by default, including an eager
+    Polars frame for converted pandas input. Use
+    ``set_output(transform="pandas")`` for compatibility output; install
+    ``polars-learn[pandas]`` for pandas and PyArrow. Lazy output defers row
+    execution, while eager Polars or pandas output collects during transform.
+    Prefer native Polars input/output for speed and to avoid conversion overhead.
+
     Parameters
     ----------
     columns : sequence of str

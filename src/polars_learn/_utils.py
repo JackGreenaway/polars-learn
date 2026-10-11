@@ -172,6 +172,13 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
     ) -> NDArray[np.object_]:
         """Return the fitted output column names.
 
+        Use these names to label model inputs or inspect a fitted pipeline.
+        Returns a copy of the names recorded during fitting; it does not
+        transform data, collect lazy rows, or refit the transformer. Supplied
+        input names are checked against all fitted input names in exact order.
+        For SchemaValidator, inference-only extra columns are not included;
+        this is the fitted contract rather than a live query's column list.
+
         Parameters
         ----------
         input_features : array-like of str or None, default=None
@@ -202,6 +209,15 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
     # sklearn exposes set_output as an available_if descriptor.
     def set_output(self, *, transform: OutputMode | None = None) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride, reportIncompatibleVariableOverride]
         """Configure native Polars output or pandas compatibility output.
+
+        Call this when a downstream consumer needs a particular frame container.
+        It only stores a choice for subsequent transform/fit_transform calls;
+        it does not fit, transform, or collect data at configuration time.
+        Use "default" to follow each call's input kind, "polars" for eager
+        Polars, "polars-lazy" for a lazy plan, or "pandas" for an eager pandas
+        DataFrame. Converted pandas input is treated as eager Polars by default.
+        Pandas input permission remains separate: enable convert_pandas on any
+        transformer receiving pandas, even when pandas output is requested.
 
         Parameters
         ----------

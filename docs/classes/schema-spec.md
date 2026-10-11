@@ -18,6 +18,25 @@
 
 Describe a fixed contract for Polars DataFrames and LazyFrames.
 
+Use this transformer when your application already defines the required
+column names and dtypes. Both `fit` and `transform` check that explicit
+contract; required dtypes must match exactly and are never cast.
+Output places required columns in schema-key order and handles additional
+columns according to the extra-column options. `fit` records the output
+layout, including preserved extras, which later transformations must match.
+Choose `SchemaValidator` instead to learn the contract from training data
+or permit configured dtype conversions. Neither class checks business
+rules such as allowed value ranges or required non-null values.
+
+Polars is the execution engine. Native DataFrames and LazyFrames are
+accepted; pandas input requires `convert_pandas=True` and is converted
+behind the scenes. Output is native Polars by default, including an eager
+Polars frame for converted pandas input. Use
+`set_output(transform="pandas")` for compatibility output; install
+`polars-learn[pandas]` for pandas and PyArrow. Lazy output defers row
+execution, while eager Polars or pandas output collects during transform.
+Prefer native Polars input/output for speed and to avoid conversion overhead.
+
 ### Parameters
 
 <dl class="api-fields">
@@ -71,9 +90,15 @@ preserved extras. Extra dtypes are not validated.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L129">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L148">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Validate the explicit contract and record fitted output names.
+
+Call before transforming to verify the declared contract and record the
+output layout. Checks required names, exact dtypes, ordering, and allowed
+extras, then stores the explicit schema and output names. The schema comes
+from the constructor, not from inferred training dtypes. Preserved training
+extras become part of the output-name contract. No values are cast.
 
 #### Parameters
 
@@ -106,9 +131,22 @@ Fitted output names include preserved training extras. No casts occur.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L229">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L267">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
 Check exact required dtypes and return the fitted output columns.
+
+Call after fitting to enforce the application's fixed contract on new data.
+Checks required names, exact dtypes, configured order, and extra-column
+policies, then selects required columns in schema-key order. The output
+names and order must match fitting, including preserved extras. No casting
+occurs and the original input is never modified.
+
+Output follows `set_output`: native Polars by default, eager Polars for
+`"polars"`, a LazyFrame for `"polars-lazy"`, or a pandas DataFrame for
+`"pandas"`. Eager Polars and pandas output collect lazy rows. Pandas output
+uses Polars conversion defaults and may change dtype/null representation;
+missing pandas or PyArrow raises `ImportError` at conversion. Pandas input
+requires `convert_pandas=True` independently of the output choice.
 
 #### Parameters
 
@@ -142,13 +180,26 @@ errors are not wrapped.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L168">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L193">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
     X,
     y=None,
     **fit_params,
 )</code></pre></div>
 
 Fit and transform the same input using the configured return kind.
+
+Convenience method for preparing training data: calls `fit(X, y)` and
+then `transform(X)` on the same input. This updates fitted state and
+returns the prepared frame. The target is ignored and extra fit parameters
+are unsupported. See `fit` for the class-specific learned contract and
+`transform` for validation and output behavior.
+
+Output follows `set_output`: native Polars by default, eager Polars for
+`"polars"`, a LazyFrame for `"polars-lazy"`, or a pandas DataFrame for
+`"pandas"`. Eager Polars and pandas output collect lazy rows. Pandas output
+uses Polars conversion defaults and may change dtype/null representation;
+missing pandas or PyArrow raises `ImportError` at conversion. Pandas input
+requires `convert_pandas=True` independently of the output choice.
 
 #### Parameters
 
@@ -173,6 +224,13 @@ Fit and transform the same input using the configured return kind.
 <div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L170">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_feature_names_out</span>(input_features=None)</code></pre></div>
 
 Return the fitted output column names.
+
+Use these names to label model inputs or inspect a fitted pipeline.
+Returns a copy of the names recorded during fitting; it does not
+transform data, collect lazy rows, or refit the transformer. Supplied
+input names are checked against all fitted input names in exact order.
+For SchemaValidator, inference-only extra columns are not included;
+this is the fitted contract rather than a live query's column list.
 
 #### Parameters
 
@@ -255,9 +313,18 @@ fail at the next relevant fit or transform operation.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L203">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_output</span>(*, transform=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L210">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_output</span>(*, transform=None)</code></pre></div>
 
 Configure native Polars output or pandas compatibility output.
+
+Call this when a downstream consumer needs a particular frame container.
+It only stores a choice for subsequent transform/fit_transform calls;
+it does not fit, transform, or collect data at configuration time.
+Use "default" to follow each call's input kind, "polars" for eager
+Polars, "polars-lazy" for a lazy plan, or "pandas" for an eager pandas
+DataFrame. Converted pandas input is treated as eager Polars by default.
+Pandas input permission remains separate: enable convert_pandas on any
+transformer receiving pandas, even when pandas output is requested.
 
 #### Parameters
 

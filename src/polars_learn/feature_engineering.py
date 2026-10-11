@@ -21,6 +21,25 @@ _FeatureDefinition: TypeAlias = FeatureSpec | FeatureSpecConfig | dict[str, Any]
 class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     """Apply ordered feature specifications to Polars DataFrames or LazyFrames.
 
+    Use this transformer to keep Polars feature logic inside a model pipeline,
+    so training and prediction apply the same preparation to raw observations.
+    It applies each ``FeatureSpec`` in entry order using Polars ``with_columns``,
+    then applies that specification's drops before starting the next. Later
+    specifications can therefore use retained outputs from earlier stages.
+    ``fit`` records input names/order and the resulting output schema;
+    ``transform`` replays the definitions and checks that schema. It does not
+    learn expression-specific training statistics: add a fitted statistical
+    transformer for quantities that must remain fixed after training.
+
+    Polars is the execution engine. Native DataFrames and LazyFrames are
+    accepted; pandas input requires ``convert_pandas=True`` and is converted
+    behind the scenes. Output is native Polars by default, including an eager
+    Polars frame for converted pandas input. Use
+    ``set_output(transform="pandas")`` for compatibility output; install
+    ``polars-learn[pandas]`` for pandas and PyArrow. Lazy output defers row
+    execution, while eager Polars or pandas output collects during transform.
+    Prefer native Polars input/output for speed and to avoid conversion overhead.
+
     Parameters
     ----------
     features : FeatureSpec, dict, or sequence of FeatureSpec/dict
@@ -207,6 +226,12 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     def fit(self, X: object, y: object = None) -> Self:
         """Validate training expressions and learn input and output schemas.
 
+        Call on raw training data to establish the expected input and feature layout.
+        Builds the ordered feature plan and records input names/order and resulting
+        output names/dtypes. Eager input executes the plan; lazy input checks schema
+        metadata without evaluating rows. Expressions are not converted into learned
+        statistics. Returns the fitted transformer, not the engineered frame.
+
         Parameters
         ----------
         X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
@@ -247,6 +272,21 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     ) -> OutputFrame:
         """Fit to training data and return its transformed representation.
 
+        Convenience method for preparing training data: calls ``fit(X, y)`` and
+        then ``transform(X)`` on the same input. This updates fitted state and
+        returns the prepared frame. The target is ignored and extra fit parameters
+        are unsupported. See ``fit`` for the class-specific learned contract and
+        ``transform`` for validation and output behavior.
+        Eager feature expressions run twice because fit and transform each execute
+        the feature plan. Lazy input remains a plan unless eager output is requested.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
+
         Parameters
         ----------
         X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
@@ -277,6 +317,20 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
     def transform(self, X: object) -> OutputFrame:
         """Generate features and verify the fitted output schema.
+
+        Call after fitting to prepare new raw observations with the same feature
+        logic. Requires the fitted input names in their original order, applies
+        specifications in entry order, and checks output names, order, and dtypes
+        against ``output_schema_``. Each stage adds its expressions and then drops
+        its configured columns; subsequent stages can use retained earlier outputs.
+        The original input is never modified.
+
+        Output follows ``set_output``: native Polars by default, eager Polars for
+        ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for
+        ``"pandas"``. Eager Polars and pandas output collect lazy rows. Pandas output
+        uses Polars conversion defaults and may change dtype/null representation;
+        missing pandas or PyArrow raises ``ImportError`` at conversion. Pandas input
+        requires ``convert_pandas=True`` independently of the output choice.
 
         Parameters
         ----------
