@@ -1,7 +1,7 @@
 [project]
 name = "polars-learn"
 version = "0.1.2"
-description = "Native Polars feature engineering and schema validation for scikit-learn"
+description = "Polars-native feature engineering, column selection, and schema validation for scikit-learn-style estimators and pipelines"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

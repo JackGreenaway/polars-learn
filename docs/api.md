@@ -7,9 +7,10 @@ workflows, examples, and development instructions.
 ## Shared Transformer Behavior
 
 `ColumnSelector`, `FeaturePassthrough`, `SchemaSpec`, `SchemaValidator`, and
-`FeatureEngineer` are
-scikit-learn transformers. `FeatureSpec` describes an operation and is not an
-estimator.
+`FeatureEngineer` implement the scikit-learn transformer/estimator interface.
+They compose through fit/transform and scikit-learn's parameter conventions,
+following the same estimator pattern used by libraries such as XGBoost.
+`FeatureSpec` describes an operation and is not an estimator.
 
 ### Input and Output
 
@@ -32,6 +33,22 @@ used during fitting. Lazy schema checks use metadata and do not evaluate rows;
 source metadata access can still occur. Value-dependent failures occur at query
 execution. Requesting lazy output for eager input can wrap an already evaluated
 result. To defer row evaluation throughout, supply a LazyFrame.
+
+### Estimator Conventions
+
+Preprocessing transformers use `fit` to validate or learn input contracts and
+`transform` to apply the fitted transformation. Predictive estimators use `fit`
+to learn model parameters and `predict` to apply the fitted model. Libraries
+such as XGBoost expose this same estimator pattern through their sklearn API.
+See the [README estimator guide](../README.md#the-estimator-pattern).
+
+The common interface lets a Pipeline fit its preprocessing steps, pass prepared
+features to the final estimator, and reuse those fitted steps for prediction.
+It does not make feature containers or dtypes interchangeable. The final model
+must accept the prepared output. Use `set_output(transform="polars")` at the
+last native step when eager output is needed, or add an explicit conversion if
+the model requires another container. `"polars-lazy"` is this package's own
+output setting, not a general model option.
 
 ### Common Constructor Options
 
