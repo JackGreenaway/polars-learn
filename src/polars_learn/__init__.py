@@ -8,9 +8,11 @@ for use by FeatureEngineer. All six classes accept verbosity=0, 1, or 2.
 
 from .exceptions import (
     FeatureEngineeringError,
+    InconsistentVersionWarning,
     PandasConversionWarning,
     PolarsLearnError,
     SchemaValidationError,
+    SerializationError,
 )
 from .feature_engineering import FeatureEngineer
 from .feature_spec import ColumnSelector, FeatureSpec
@@ -30,4 +32,6 @@ __all__ = [
     "SchemaValidationError",
     "FeatureEngineeringError",
     "PandasConversionWarning",
+    "InconsistentVersionWarning",
+    "SerializationError",
 ]

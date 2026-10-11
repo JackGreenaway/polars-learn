@@ -20,12 +20,11 @@ Frame: TypeAlias = pl.DataFrame | pl.LazyFrame
 class FeatureSpecConfig(TypedDict, total=False):
     """Keyword arguments unpacked into FeatureSpec by FeatureEngineer.
 
-    Exactly one of expression and expressions is required at runtime. This type
+    The expression argument is required at runtime. This type
     describes a regular dict; FeatureEngineer applies FeatureSpec validation.
     """
 
-    expression: pl.Expr | None
-    expressions: Sequence[pl.Expr] | None
+    expression: pl.Expr | Sequence[pl.Expr]
     alias: str | None
     drop: Sequence[str] | None
     name: str | None

@@ -69,7 +69,7 @@ def test_input_names_checked(frame, frame_change):
         [FeatureSpec(pl.col("price"), drop=["absent"])],
         [FeatureSpec(pl.col("price"), drop=["price"]), FeatureSpec(pl.col("price"))],
         [FeatureSpec(pl.col("price").str.to_uppercase())],
-        [FeatureSpec(expressions=[pl.all(), pl.col("price")])],
+        [FeatureSpec(expression=[pl.all(), pl.col("price")])],
     ],
 )
 def test_execution_errors_chained(frame, features):
@@ -82,7 +82,7 @@ def test_expressions_in_one_spec_are_parallel(frame):
     est = FeatureEngineer(
         [
             FeatureSpec(
-                expressions=[pl.col("price").alias("new"), pl.col("new").alias("later")]
+                expression=[pl.col("price").alias("new"), pl.col("new").alias("later")]
             )
         ]
     )
@@ -132,7 +132,7 @@ def test_runtime_failure(frame):
 @pytest.mark.parametrize("lazy", [False, True])
 def test_single_spec_matches_sequence_and_preserves_parameter(frame, lazy):
     spec = FeatureSpec(
-        expressions=[
+        expression=[
             (pl.col("price") * pl.col("quantity")).alias("notional"),
             (pl.col("price") + 1).alias("incremented"),
         ],
@@ -250,7 +250,7 @@ def test_mixed_specs_and_dicts_preserve_dependencies_and_clone(frame):
 def test_dict_spec_supports_multiple_expressions_and_revalidation(frame):
     engineer = FeatureEngineer(
         {
-            "expressions": [pl.col("price").alias("a"), pl.col("quantity").alias("b")],
+            "expression": [pl.col("price").alias("a"), pl.col("quantity").alias("b")],
             "drop": ["price", "quantity"],
         }
     )
@@ -271,14 +271,14 @@ def test_dict_spec_supports_multiple_expressions_and_revalidation(frame):
 @pytest.mark.parametrize(
     "config,error",
     [
-        ({}, ValueError),
+        ({}, TypeError),
         ({"expression": pl.col("price"), "unknown": True}, TypeError),
         ({"expression": "price"}, TypeError),
         (
             {"expression": pl.col("price"), "expressions": [pl.col("quantity")]},
-            ValueError,
+            TypeError,
         ),
-        ({"expressions": []}, ValueError),
+        ({"expression": []}, ValueError),
         ({"expression": pl.col("price"), "drop": "price"}, TypeError),
         ({"expression": pl.col("price"), "verbosity": True}, TypeError),
     ],

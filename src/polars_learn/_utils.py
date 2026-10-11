@@ -2,7 +2,7 @@
 
 import importlib
 import warnings
-from typing import Any, Self, cast
+from typing import Any, Self, SupportsIndex, cast
 
 import numpy as np
 import polars as pl
@@ -12,6 +12,7 @@ from sklearn.utils.validation import (
     check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
 )
 
+from ._serialization import reduce_object
 from .exceptions import PandasConversionWarning
 from .types import FeatureNames, Frame, OutputMode, Schema
 
@@ -106,6 +107,10 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
 
     verbosity: int
 
+    def __reduce_ex__(self, protocol: SupportsIndex) -> tuple[Any, ...]:
+        """Warn about changed dependencies before restoring saved transformer state."""
+        return reduce_object(self, protocol)
+
     def _validate_options(self) -> None:
         validate_verbosity(self.verbosity)
         for name in (
@@ -187,7 +192,7 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
         return self.output_features_.copy()
 
     # sklearn exposes set_output as an available_if descriptor.
-    def set_output(self, *, transform: OutputMode | None = None) -> Self:  # pyright: ignore[reportIncompatibleVariableOverride]
+    def set_output(self, *, transform: OutputMode | None = None) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride, reportIncompatibleVariableOverride]
         """Configure native output without automatic container conversion.
 
         Parameters

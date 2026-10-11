@@ -42,3 +42,6 @@ junit.xml
 *~
 .DS_Store
 Thumbs.db
+
+# Generated documentation
+/site/

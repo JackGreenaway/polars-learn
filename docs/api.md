@@ -1,7 +1,7 @@
 # API Reference
 
 Import public classes and exceptions from `polars_learn`. This reference describes
-the implementation in this checkout. See the [README](../README.md) for complete
+the implementation in this checkout. See the [getting started guide](getting-started.md) for complete
 workflows, examples, and development instructions.
 
 ## Shared Transformer Behavior
@@ -40,7 +40,7 @@ Preprocessing transformers use `fit` to validate or learn input contracts and
 `transform` to apply the fitted transformation. Predictive estimators use `fit`
 to learn model parameters and `predict` to apply the fitted model. Libraries
 such as XGBoost expose this same estimator pattern through their sklearn API.
-See the [README estimator guide](../README.md#the-estimator-pattern).
+See the [estimator guide](user-guide/estimators.md#the-estimator-pattern).
 
 The common interface lets a Pipeline fit its preprocessing steps, pass prepared
 features to the final estimator, and reuse those fitted steps for prediction.
@@ -173,7 +173,7 @@ A sequential pipeline step selects its output subset. Use an eager
 with another branch's transformed columns. Configure the outer transformer
 with `set_output(transform="polars")` to preserve separate column dtypes, and
 `verbose_feature_names_out=False` to keep unprefixed names when they are unique.
-See the [README branch example](../README.md#explicit-feature-passthrough).
+See the [branch example](user-guide/selection.md).
 
 ```python
 import polars as pl
@@ -306,9 +306,8 @@ assert validator.get_feature_names_out().tolist() == ["x"]
 
 ```text
 FeatureSpec(
-    expression=None,
+    expression,
     *,
-    expressions=None,
     alias=None,
     drop=None,
     name=None,
@@ -318,14 +317,13 @@ FeatureSpec(
 
 | Parameter | Contract |
 | --- | --- |
-| `expression` | A single `pl.Expr`. Specify exactly one of this and `expressions`. |
-| `expressions` | Nonempty sequence of `pl.Expr` objects evaluated together. A bare Expr or string is invalid. |
+| `expression` | Required single `pl.Expr` or nonempty sequence of `pl.Expr` objects evaluated together. Normalized to a tuple; strings and generators are invalid. |
 | `alias` | Optional nonempty string overriding the output name of a single expression with exactly one output. |
 | `drop` | Optional sequence of nonempty string names to remove after evaluating the expressions. A bare string is invalid. |
 | `name` | Optional nonempty string used to label feature execution errors and detailed progress. |
 | `verbosity` | Integer 0, 1, or 2. Reports construction validation independently of an engineer's verbosity. |
 
-Stored attributes are `expressions` (canonical tuple, including an explicit
+Stored attributes are `expression` (canonical tuple, including an explicit
 alias), `drop` (tuple), `name`, and `verbosity`. There are no fitted attributes
 or transformer methods. Pass specifications to `FeatureEngineer` for execution.
 
@@ -335,12 +333,16 @@ multiple outputs are resolved against input by the engineer. Existing columns
 can be overwritten. Multiple expressions within this specification cannot use
 new columns created by siblings; put dependent expressions in later specifications.
 
-Bad expression or drop types raise `TypeError`. Conflicting/empty expression
-arguments, invalid alias/name, ambiguous alias, and detectable duplicate output
+Bad expression or drop types raise `TypeError`. Empty expression
+sequences, invalid alias/name, ambiguous alias, and detectable duplicate output
 names raise `ValueError`. Invalid verbosity types/levels also fail at construction.
 `repr(spec)` shows its canonical expressions, drops, and name.
 
 ## FeatureEngineer
+
+Use `FeatureEngineer` as a preprocessing step before a predictive estimator. Define feature expressions once, fit the full pipeline on raw training data, and pass new raw observations to `pipeline.predict`. The pipeline calls the engineer's `transform` before the estimator's prediction method, generating the same named features in the same specification order. This keeps preparation inside the pipeline instead of requiring a separate feature-building function at each call site. See the [raw-data prediction example](getting-started.md#your-first-raw-data-prediction-pipeline).
+
+The fitted raw input names/order and resulting feature schema remain the contract. Prediction callers provide required raw columns, not precomputed derived columns. `FeatureEngineer` replays expressions and validates schemas; learned preprocessing statistics must come from other fitted pipeline steps.
 
 ```text
 FeatureEngineer(
@@ -361,11 +363,11 @@ specifications are checked before processing input. The original parameter
 object is retained unchanged for estimator cloning and `get_params`.
 `set_params(features=...)` accepts the same forms; refit after changes.
 
-Config keys are `expression`, `expressions`, `alias`, `drop`, `name`, and
+Config keys are `expression`, `alias`, `drop`, `name`, and
 `verbosity`, with the same types and validation as the FeatureSpec constructor.
-Exactly one expression argument must be provided. Unknown keys fail with
-`TypeError`; an empty dict or conflicting expression arguments fail with
-`ValueError`. Config errors identify `features` or `features[index]` and preserve
+The required `expression` accepts a single expression or a nonempty sequence.
+Missing arguments, unknown keys, and invalid expression types fail with
+`TypeError`; an empty expression sequence fails with `ValueError`. Config errors identify `features` or `features[index]` and preserve
 the original exception as their cause. Real Polars expressions are required;
 strings are not parsed or evaluated.
 
@@ -443,15 +445,31 @@ plan = engineer.fit_transform(X.lazy())
 assert plan.collect().to_dict(as_series=False) == {"x": [1, 2], "b": [4, 6]}
 ```
 
+## Persistence
+
+All six main classes support standard Python pickle round trips. Native `pl.Expr` objects use Polars' built-in serialization, including expressions in single specifications, dict configs, and mixed sequences. Transformer parameters, fitted input/output schemas and names, pandas-conversion settings, and explicit output-container settings are retained. Unfitted instances remain unfitted after loading. The package does not introduce a separate expression encoding or compatibility aliases.
+
+Tests cover every pickle protocol available to the test interpreter, eager and lazy fitting, native arithmetic/conditional/selector/literal expressions, and Python callback closures. Full fitted pipelines containing all five transformer classes and a model are loaded and used to predict raw observations in fresh Python processes, using pickle, joblib, and cloudpickle. See the [save/load example](user-guide/persistence.md).
+
+Cloudpickle is an explicit runtime dependency for Python callbacks embedded in Polars expressions. Closures and lambdas with serializable state are covered; arbitrary captured locks, open resources, plugin binaries, or missing external dependencies cannot be guaranteed portable. These limits also apply to caller-supplied custom parameter containers and final estimators.
+
+Saved objects record Python, polars-learn, Polars, scikit-learn, NumPy, and cloudpickle versions. Each mismatch emits `InconsistentVersionWarning` before the object's state is decoded, then loading is attempted. Its attributes are `class_name`, `dependency`, `original_version`, and `current_version`. Use `warnings.simplefilter("error", InconsistentVersionWarning)` to stop before state restoration on a mismatch. To accept mismatches quietly, use `warnings.simplefilter("ignore", InconsistentVersionWarning)` inside `warnings.catch_warnings()` around loading. For application-wide suppression, use `warnings.filterwarnings("ignore", category=InconsistentVersionWarning)`. Other warning categories remain active, and incompatible state still raises `SerializationError`. These filters apply equally to pickle, joblib, and cloudpickle. Final estimators may emit their own version warning categories. Older artifacts without this metadata cannot report creating versions.
+
+Expressions use native binary serialization for matching Polars versions and native JSON for cross-version attempts. Required expression operations, dtypes, callbacks, and other objects must remain compatible and available. Unavailable or rejected representations raise `SerializationError`, preserving version context and the underlying cause; old binary layouts are never used as a cross-version fallback. CI exercises both directions between Polars 1.35.2 and the locked version (currently 1.44.2), including all six main classes and a fitted prediction pipeline.
+
+Load trusted artifacts only: pickle and embedded callbacks can execute code. Polars does not guarantee expression formats across releases, and arbitrary dependency upgrades cannot be guaranteed compatible. Successful loading does not establish identical feature values or predictions; validate these after upgrading and retain pinned original dependencies for recovery. This contract preserves supported objects and behavior, not byte-identical pickle output.
+
 ## Exceptions and Warnings
 
 Import each of these from `polars_learn`:
 
 | Name | Base | Use |
 | --- | --- | --- |
-| `PolarsLearnError` | `Exception` | Base for the two package-specific processing errors. |
+| `PolarsLearnError` | `Exception` | Base for package-specific processing and persistence errors. |
 | `SchemaValidationError` | `PolarsLearnError` | Learned schema mismatches, eager cast failures, and lazy lossless widening failures. |
 | `FeatureEngineeringError` | `PolarsLearnError` | Feature planning/schema failures and wrapped eager execution errors. |
+| `SerializationError` | `PolarsLearnError` | Saving unsupported state or restoring incompatible serialized state; retains the underlying exception as its cause. |
+| `InconsistentVersionWarning` | `UserWarning` | A saved object was created with a different Python, package, or dependency version; loading is attempted unless the warning is promoted to an error. |
 | `PandasConversionWarning` | `UserWarning` | Enabled pandas input conversion when warnings are enabled. |
 
 Configuration errors and fixed-contract/selector/passthrough validation use ordinary

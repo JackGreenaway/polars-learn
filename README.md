@@ -2,7 +2,7 @@
 
 # 🐻‍❄️ polars-learn
 
-**Native Polars. Ready for scikit-learn-style estimators.**
+**Raw data in. Model-ready features out.**
 
 Composable expressions · Clear schema contracts · Eager and lazy execution
 
@@ -15,7 +15,7 @@ Composable expressions · Clear schema contracts · Eager and lazy execution
 [![MIT license](https://img.shields.io/badge/License-MIT-0F766E?style=flat-square)](LICENSE)
 [![Code style: Ruff](https://img.shields.io/badge/Code%20style-Ruff-D7FF64?style=flat-square&logo=ruff&logoColor=black)](https://docs.astral.sh/ruff/)
 
-[Quick start](#quick-start) · [API reference](docs/api.md) · [LazyFrames](#lazyframes-and-return-types) · [Releases](#releases)
+[Quick start](#quick-start) · [API reference](docs/api.md) · [LazyFrames](#lazyframes-and-return-types) · [Persistence](#saving-and-loading-a-fitted-pipeline) · [Releases](#releases)
 
 </div>
 
@@ -23,7 +23,26 @@ Composable expressions · Clear schema contracts · Eager and lazy execution
 
 Prepare Polars data for estimators that implement the scikit-learn interface, with reusable feature expressions, column selection, and schema validation. Use these transformers in a `sklearn.pipeline.Pipeline`, following the same fit-and-apply conventions used by scikit-learn and estimator-style libraries such as XGBoost. Work with eager `DataFrame` inputs or keep `LazyFrame` queries deferred until the model needs materialized features.
 
+**Put feature preparation inside the pipeline.** Define your Polars expressions once with `FeatureEngineer`, train with `pipeline.fit(raw_X, y)`, and predict with `pipeline.predict(new_raw_X)`. The pipeline generates the features before the model runs, using the same definitions and execution order in both paths. You can keep feature preparation together with the model instead of maintaining separate feature-building functions and remembering to call them before each prediction.
+
 Requires Python 3.11+, Polars 1.20+, and scikit-learn 1.6+. CI runs on Python **3.11 and 3.12**, including pandas interoperability tests.
+
+## Documentation
+
+Read the [complete documentation](https://jackgreenaway.github.io/polars-learn/) for the user guide, API reference, runnable examples, troubleshooting, and production guidance. The sources live in [docs/index.md](docs/index.md); [docs/development.md](docs/development.md) explains local preview and GitHub Pages publishing. The site becomes available after the Documentation workflow deploys successfully.
+
+## Why Put Features in the Pipeline?
+
+Feature engineering is part of the model's input preparation. Keeping it in a fitted pipeline gives training and prediction one shared preparation path: validate the raw schema, compute dependent features in order, select or drop columns, and pass the prepared frame to the estimator. New observations arrive as raw data; the pipeline prepares them at prediction time.
+
+| You define once                            | The fitted pipeline applies it                                     |
+| ------------------------------------------ | ------------------------------------------------------------------ |
+| Raw column and dtype requirements          | Validate incoming observations before feature preparation.         |
+| Feature expressions and their dependencies | Generate the same named features during training and prediction.   |
+| Columns to retain or drop                  | Provide the fitted feature layout to the model.                    |
+| Additional learned preprocessing           | Reuse fitted scaling or other estimator-based preprocessing steps. |
+
+This keeps the preparation logic visible alongside the estimator and reduces the chance of omitting a step or using a different feature definition in prediction code. `FeatureEngineer` executes your expressions and records schema expectations; it does not learn feature statistics. Put transformations that need learned training statistics in additional fitted pipeline steps.
 
 ## Installation
 
@@ -60,38 +79,67 @@ The five transformers implement the scikit-learn estimator interface: `fit`, `tr
 
 ## Quick Start
 
+Define the preparation once and train the complete pipeline on raw input. This example creates `notional` and `log_notional` inside the pipeline, removes `quantity` from the model's feature set, and retains `price`.
+
 ```python
+import numpy as np
 import polars as pl
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.pipeline import Pipeline
 
 from polars_learn import FeatureEngineer, FeatureSpec, SchemaValidator
 
-X = pl.DataFrame({"price": [10.0, 20.0, 30.0], "quantity": [2, 3, 4]})
+raw_train = pl.DataFrame({"price": [10.0, 20.0, 30.0, 40.0], "quantity": [2, 3, 4, 5]})
+y = np.array([1.0, 2.0, 3.0, 4.0])
 
-validator = SchemaValidator().fit(X)
-validated = validator.transform(X)
-
-engineer = FeatureEngineer(
+pipeline = Pipeline(
     [
-        FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional"),
-        FeatureSpec(
-            pl.col("notional").log1p(), alias="log_notional", drop=["quantity"]
+        ("raw_schema", SchemaValidator()),
+        (
+            "features",
+            FeatureEngineer(
+                [
+                    FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional"),
+                    FeatureSpec(
+                        pl.col("notional").log1p(),
+                        alias="log_notional",
+                        drop=["quantity"],
+                    ),
+                ]
+            ).set_output(transform="polars"),
         ),
+        ("model", RandomForestRegressor(n_estimators=20, random_state=0)),
     ]
 )
-result = engineer.fit_transform(validated)
 
-assert isinstance(result, pl.DataFrame)
-assert result.columns == ["price", "notional", "log_notional"]
-assert result["notional"].to_list() == [20.0, 60.0, 120.0]
-print(engineer.get_feature_names_out().tolist())
-# ['price', 'notional', 'log_notional']
+pipeline.fit(raw_train, y)
+
+# Prediction takes new raw observations; feature preparation runs inside the pipeline.
+raw_predict = pl.DataFrame({"price": [15.0, 25.0], "quantity": [2, 4]})
+predictions = pipeline.predict(raw_predict)
+assert predictions.shape == (2,)
+assert np.isfinite(predictions).all()
+
+# Inspect the prepared feature names without building features outside the pipeline.
+assert pipeline[:-1].get_feature_names_out().tolist() == [
+    "price",
+    "notional",
+    "log_notional",
+]
+assert raw_predict.columns == ["price", "quantity"]
 ```
 
-`fit(X)` returns the transformer. `transform(X)` applies a fitted transformer. `fit_transform(X)` fits and then transforms the same input. Calling `transform` or `get_feature_names_out` before a successful fit raises scikit-learn's `NotFittedError`. The input frame is never mutated.
+The prediction input contains `price` and `quantity`; you supply neither `notional` nor `log_notional`. `pipeline.predict(raw_predict)` validates the raw schema, computes the derived columns, drops `quantity` from the model input, and then predicts. Keep the target `y` separate from the raw feature frame. Fit the complete pipeline on training input and reuse that fitted pipeline for validation and prediction.
+
+The pipeline expects the fitted raw input contract at prediction time. Do not feed it a frame that has already been feature-engineered, or refit its preprocessing on prediction data. Missing required raw columns and incompatible schemas raise errors according to the configured policies.
+
+The individual transformers also work on their own: `fit(X)` returns the transformer, `transform(X)` applies it, and `fit_transform(X)` fits and prepares the same input. Calling `transform` or `get_feature_names_out` before a successful fit raises scikit-learn's `NotFittedError`. Input frames are never mutated.
 
 ## Feature Engineering
 
-Create a `FeatureSpec` with exactly one of `expression` (a single `pl.Expr`) or `expressions` (a nonempty sequence). Use native expression names, an expression's `.alias(...)`, or the specification's `alias` argument to name its outputs. An explicit `alias` requires exactly one expression with one output.
+`FeatureEngineer` turns an ordered set of Polars expressions into a reusable pipeline step. Each `transform` evaluates those definitions against the incoming raw frame, so the fitted pipeline can prepare new observations whenever you call `predict`. The standalone examples below show how to define and inspect that step; in a predictive workflow, include it before the final estimator as in the quick start.
+
+Create a `FeatureSpec` with one required `expression` argument: pass a single `pl.Expr` or a nonempty sequence of expressions. The specification normalizes either form to a tuple without changing your input sequence. Use native expression names, an expression's `.alias(...)`, or the specification's `alias` argument to name its outputs. An explicit `alias` requires exactly one expression with one output.
 
 ```python
 import polars as pl
@@ -100,7 +148,7 @@ from polars_learn import FeatureEngineer, FeatureSpec
 
 quotes = pl.DataFrame({"ask": [11.0], "bid": [9.0]})
 spec = FeatureSpec(
-    expressions=[
+    expression=[
         (pl.col("ask") - pl.col("bid")).alias("spread"),
         ((pl.col("ask") + pl.col("bid")) / 2).alias("mid"),
     ],
@@ -123,7 +171,7 @@ engineer = FeatureEngineer({"expression": pl.col("price") * 2, "alias": "doubled
 assert engineer.fit_transform(X)["doubled"].to_list() == [20.0, 40.0]
 ```
 
-A dict uses the exact keys `expression`, `expressions`, `alias`, `drop`, `name`, and `verbosity` accepted by `FeatureSpec`, with exactly one of `expression` or `expressions`. Expressions must be actual Polars expression objects; expression strings are not evaluated. Unknown keys and invalid values fail at construction, with the configuration's sequence index included when applicable. An empty dict is invalid; use `FeatureEngineer([])` for an identity operation.
+A dict uses the exact keys `expression`, `alias`, `drop`, `name`, and `verbosity` accepted by `FeatureSpec`. The required `expression` value accepts one Polars expression or a nonempty sequence; strings, generators, and empty sequences are rejected. Expressions must be actual Polars expression objects; expression strings are not evaluated. Unknown keys and invalid values fail at construction, with the configuration's sequence index included when applicable. An empty dict is invalid; use `FeatureEngineer([])` for an identity operation.
 
 Single definitions are treated as one-element sequences internally; constructor parameters, including original dicts, are retained unchanged for scikit-learn cloning and `get_params`. The same forms are accepted by `set_params(features=...)`; refit after changes.
 
@@ -273,7 +321,7 @@ Inspect lazy output with `plan.collect_schema()` for names and dtypes, and `plan
 
 ## Pipelines with scikit-learn-style Estimators
 
-The preprocessing steps use `fit` and `transform`; the final estimator uses `fit(X, y)` and its prediction method. `Pipeline` fits the preprocessing steps on training input and reapplies their fitted contracts when predicting. The transformers ignore `y`; the model uses it to learn predictions.
+The preprocessing steps use `fit` and `transform`; the final estimator uses `fit(X, y)` and its prediction method. Pass raw data to the complete pipeline for both fitting and prediction. `Pipeline` fits preprocessing on training input and, during `predict`, reapplies the fitted schema policies and feature expressions before invoking the model. The transformers ignore `y`; the model uses it to learn predictions.
 
 A pipeline built from these transformers can remain lazy. Set the last native transformer to eager output before a downstream estimator that needs materialized data. `"polars-lazy"` is a package-specific output option; do not pass it to scikit-learn's standard transformers.
 
@@ -314,16 +362,111 @@ Cloning keeps constructor parameters and explicit output settings, and discards 
 
 These transformers follow the same estimator conventions used by scikit-learn and libraries such as XGBoost:
 
-| Operation | Preprocessing transformer | Final predictive model |
-| --- | --- | --- |
-| `fit` | Validate or learn the training input contract; return the fitted transformer. | Learn model parameters from training features and targets. |
-| Apply fitted state | `transform(X)` returns prepared features. | `predict(X)` returns predictions. |
-| Fit and apply | `fit_transform(X)` fits and returns prepared training features. | Fit first, then call the model's prediction method. |
-| Configure | Constructor parameters, `get_params`, and `set_params`. | The same parameter conventions for estimator-style models. |
+| Operation          | Preprocessing transformer                                                     | Final predictive model                                     |
+| ------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `fit`              | Validate or learn the training input contract; return the fitted transformer. | Learn model parameters from training features and targets. |
+| Apply fitted state | `transform(X)` returns prepared features.                                     | `predict(X)` returns predictions.                          |
+| Fit and apply      | `fit_transform(X)` fits and returns prepared training features.               | Fit first, then call the model's prediction method.        |
+| Configure          | Constructor parameters, `get_params`, and `set_params`.                       | The same parameter conventions for estimator-style models. |
 
 In a `Pipeline`, each preprocessing step prepares the input for the next step, and the final estimator learns from that prepared input. Calling `predict` on the fitted pipeline reapplies the preprocessing steps before predicting. XGBoost is an example of a library with a [scikit-learn estimator interface](https://xgboost.readthedocs.io/en/stable/python/sklearn_estimator.html); its regression/classification models use `fit` and `predict`. The `transform` operation belongs to the preprocessing steps.
 
 This shared interface describes how steps compose. The final estimator must also accept the prepared feature container and dtypes. Set the last native transformer to `set_output(transform="polars")` when the model needs eager data. If a model requires a different container, add an explicit conversion step at that boundary. Keep preprocessing fitted on training input and reuse it for validation and prediction.
+
+## Saving and Loading a Fitted Pipeline
+
+Save the complete fitted pipeline so the feature expressions, raw-input contract, fitted feature names, output settings, and model stay together. After loading it, keep passing raw observations to `predict`; you do not need to recreate the Polars expressions or prepare features separately.
+
+`FeatureSpec`, `FeatureEngineer`, `ColumnSelector`, `FeaturePassthrough`, `SchemaSpec`, and `SchemaValidator` support Python pickling in fitted and unfitted forms where applicable. Ordinary `pl.Expr` objects, single-spec inputs, dict configs, and mixed specification sequences are preserved using Polars' native expression serialization. Fitted schemas and output-container choices survive loading. Pickling an unfitted transformer does not fit it.
+
+```python
+import pickle
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import numpy as np
+import polars as pl
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.pipeline import Pipeline
+
+from polars_learn import FeatureEngineer, FeatureSpec, SchemaValidator
+
+raw_train = pl.DataFrame({"price": [10.0, 20.0, 30.0], "quantity": [2, 3, 4]})
+y = np.array([1.0, 2.0, 3.0])
+pipeline = Pipeline(
+    [
+        ("schema", SchemaValidator()),
+        (
+            "features",
+            FeatureEngineer(
+                FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")
+            ).set_output(transform="polars"),
+        ),
+        ("model", RandomForestRegressor(n_estimators=10, random_state=0)),
+    ]
+)
+pipeline.fit(raw_train, y)
+
+# Use your persistent model path in an application; this example cleans up its files.
+with TemporaryDirectory() as directory:
+    model_path = Path(directory) / "pipeline.pkl"
+    with model_path.open("wb") as destination:
+        pickle.dump(pipeline, destination, protocol=pickle.HIGHEST_PROTOCOL)
+    with model_path.open("rb") as source:
+        restored = pickle.load(source)
+
+raw_predict = pl.DataFrame({"price": [15.0, 25.0], "quantity": [2, 4]})
+np.testing.assert_array_equal(
+    restored.predict(raw_predict), pipeline.predict(raw_predict)
+)
+assert restored[:-1].get_feature_names_out().tolist() == [
+    "price",
+    "quantity",
+    "notional",
+]
+```
+
+`joblib.dump`/`joblib.load` and `cloudpickle.dumps`/`cloudpickle.loads` also work with these objects. `cloudpickle` is a runtime dependency because Python callbacks embedded in Polars expressions need it for serialization. Tests include local lambda/closure callbacks and loading a complete fitted pipeline in a fresh interpreter. Prefer native Polars expressions when possible; custom callbacks must have serializable captured state and their required modules, plugins, and external resources available when they execute.
+
+Saved objects record their creating versions of Python, `polars-learn`, Polars, scikit-learn, NumPy, and cloudpickle. Loading under a different version emits `polars_learn.InconsistentVersionWarning` for each changed dependency before restoring that object's state, then attempts loading. The warning exposes `class_name`, `dependency`, `original_version`, and `current_version`. Older artifacts without version metadata cannot report their creating environment.
+
+Same-version expression loading uses Polars binary serialization to preserve native values, including NaN and infinity. Cross-version expression loading tries Polars' JSON representation, provided the expression operations, dtypes, callbacks, and other required objects are available and compatible in the receiving environment. If that representation is unavailable or rejected, loading raises `SerializationError` with version context and the original exception as its cause; it does not fall back to the old binary layout. CI verifies both directions between Polars 1.35.2 and the locked version, currently 1.44.2, for all six main classes and a fitted prediction pipeline.
+
+To reject a version mismatch before restoring state, promote the warning to an error:
+
+```python
+import pickle
+import warnings
+
+import polars as pl
+
+from polars_learn import FeatureSpec, InconsistentVersionWarning
+
+saved = pickle.dumps(FeatureSpec(pl.col("price") * 2))
+with warnings.catch_warnings():
+    warnings.simplefilter("error", InconsistentVersionWarning)
+    restored_spec = pickle.loads(saved)
+```
+
+If you accept a version mismatch, silence this package's version warnings around loading with the standard Python warning filter. The context restores your previous filters afterward and leaves other warning categories active. This works with pickle, joblib, and cloudpickle; incompatible state still raises `SerializationError`.
+
+```python
+import pickle
+import warnings
+
+import polars as pl
+
+from polars_learn import FeatureSpec, InconsistentVersionWarning
+
+saved = pickle.dumps(FeatureSpec(pl.col("price") * 2))
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", InconsistentVersionWarning)
+    restored_spec = pickle.loads(saved)
+```
+
+To silence this category application-wide, call `warnings.filterwarnings("ignore", category=InconsistentVersionWarning)` once in your application. Final estimators may issue their own version warnings, controlled by their own warning categories.
+
+**Load only artifacts you trust.** Pickle-based loading can execute Python code, including through serialized expressions containing Python callbacks. Cross-version loading is a compatibility attempt, and a successful load does not guarantee identical numerical results. Validate transformed features and predictions after upgrading, and retain the original environment lockfile for recovery. Arbitrary future version transitions and unpicklable captured resources cannot be guaranteed portable. See [Polars expression persistence](https://docs.pola.rs/api/python/stable/reference/expressions/api/polars.Expr.deserialize.html) and [scikit-learn model persistence](https://scikit-learn.org/stable/model_persistence.html).
 
 ## Verbosity
 

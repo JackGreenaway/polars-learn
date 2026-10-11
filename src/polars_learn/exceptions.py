@@ -2,7 +2,7 @@
 
 
 class PolarsLearnError(Exception):
-    """Base of SchemaValidationError and FeatureEngineeringError.
+    """Base of package-specific processing and persistence errors.
 
     Configuration TypeError/ValueError, scikit-learn NotFittedError, and native
     Polars/source exceptions are outside this hierarchy.
@@ -34,3 +34,38 @@ class PandasConversionWarning(UserWarning):
     Controlled by warn_on_conversion, independently of verbosity. This is a
     UserWarning, not a PolarsLearnError.
     """
+
+
+class SerializationError(PolarsLearnError):
+    """Serialization or restoration failed; the original error is preserved."""
+
+
+class InconsistentVersionWarning(UserWarning):
+    """A saved class is being restored with a different dependency version.
+
+    Attributes identify the class, dependency, original_version, and current_version.
+    Loading is attempted unless the caller promotes this warning to an error.
+    Silence accepted mismatches with warnings.simplefilter("ignore",
+    InconsistentVersionWarning), preferably inside warnings.catch_warnings().
+    """
+
+    def __init__(
+        self,
+        class_name: str,
+        dependency: str,
+        original_version: str,
+        current_version: str,
+    ) -> None:
+        self.class_name = class_name
+        self.dependency = dependency
+        self.original_version = original_version
+        self.current_version = current_version
+        super().__init__(class_name, dependency, original_version, current_version)
+
+    def __str__(self) -> str:
+        return (
+            f"Loading {self.class_name} saved with {self.dependency} "
+            f"{self.original_version} using {self.current_version}. Restoration will "
+            "be attempted, but compatibility and identical results are not guaranteed. "
+            "Validate the loaded object or use its original environment."
+        )

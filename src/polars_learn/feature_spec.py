@@ -1,7 +1,7 @@
 """Composable descriptions of native Polars feature operations."""
 
 from collections.abc import Sequence
-from typing import Self
+from typing import Any, Self, SupportsIndex
 
 import numpy as np
 import polars as pl
@@ -9,6 +9,7 @@ from sklearn.utils.validation import (
     check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
 )
 
+from ._serialization import reduce_object
 from ._utils import (
     NativeTransformer,
     frame_schema,
@@ -268,12 +269,10 @@ class FeatureSpec:
 
     Parameters
     ----------
-    expression : polars.Expr or None, default=None
-        Single expression to evaluate. Specify exactly one of ``expression`` or
-        ``expressions``. Its native output name is used unless ``alias`` is set.
-    expressions : sequence of polars.Expr or None, default=None
-        Nonempty sequence of expressions evaluated together. Expressions within
-        one specification cannot reference columns created by siblings.
+    expression : polars.Expr or sequence of polars.Expr
+        Single expression or nonempty sequence evaluated together, normalized to
+        a tuple. Native output names are used unless ``alias`` is set. Sibling
+        expressions cannot depend on outputs created within the same specification.
     alias : str or None, default=None
         Override the output name of a single expression. Multiple expressions
         or an expression expanding to multiple outputs cannot use this option.
@@ -287,7 +286,7 @@ class FeatureSpec:
 
     Attributes
     ----------
-    expressions : tuple of polars.Expr
+    expression : tuple of polars.Expr
         Canonical expression representation, including any explicit alias.
     drop : tuple of str
         Columns to drop after evaluating this specification.
@@ -299,7 +298,7 @@ class FeatureSpec:
     TypeError
         If expressions, drop columns, containers, or verbosity have invalid types.
     ValueError
-        If expression arguments conflict, expressions are empty, an explicit
+        If the expression sequence is empty, an explicit
         alias is ambiguous, output names are duplicated, a label is invalid,
         or verbosity is outside the supported levels.
 
@@ -315,6 +314,11 @@ class FeatureSpec:
     depend on the input schema are resolved by the feature engineer.
     This class is an operation description, not a scikit-learn estimator. Its
     verbosity reports construction independently of an engineer's verbosity.
+    Pickling preserves native expressions using Polars serialization, including
+    Python callbacks with serializable state. Version mismatches emit
+    InconsistentVersionWarning before state restoration. Compatible cross-version
+    expressions are attempted using JSON; incompatible state raises
+    SerializationError. Load trusted artifacts only and validate after upgrading.
 
     Examples
     --------
@@ -323,15 +327,14 @@ class FeatureSpec:
     >>> spec = FeatureSpec(
     ...     pl.col("price") * pl.col("quantity"), alias="notional"
     ... )
-    >>> spec.expressions[0].meta.output_name()
+    >>> spec.expression[0].meta.output_name()
     'notional'
     """
 
     def __init__(
         self,
-        expression: pl.Expr | None = None,
+        expression: pl.Expr | Sequence[pl.Expr],
         *,
-        expressions: Sequence[pl.Expr] | None = None,
         alias: str | None = None,
         drop: Sequence[str] | None = None,
         name: str | None = None,
@@ -339,18 +342,18 @@ class FeatureSpec:
     ) -> None:
         validate_verbosity(verbosity)
         self.verbosity = verbosity
-        if (expression is None) == (expressions is None):
-            raise ValueError("Specify exactly one of expression or expressions.")
-        if expressions is not None and (
-            isinstance(expressions, (str, pl.Expr))
-            or not isinstance(expressions, Sequence)
+        if isinstance(expression, pl.Expr):
+            canonical = (expression,)
+        elif isinstance(expression, Sequence) and not isinstance(
+            expression, (str, bytes)
         ):
-            raise TypeError("expressions must be a sequence of Polars expressions.")
-        canonical = (
-            (expression,) if expression is not None else tuple(expressions or ())
-        )
+            canonical = tuple(expression)
+        else:
+            raise TypeError(
+                "expression must be a Polars Expr or a sequence of Polars Expr objects."
+            )
         if not canonical:
-            raise ValueError("expressions must not be empty.")
+            raise ValueError("expression must not be an empty sequence.")
         if any(not isinstance(expr, pl.Expr) for expr in canonical):
             raise TypeError("Every expression must be a Polars Expr.")
         if alias is not None:
@@ -376,15 +379,19 @@ class FeatureSpec:
             raise TypeError("drop must be a sequence of nonempty column names.")
         if name is not None and (not isinstance(name, str) or not name):
             raise ValueError("name must be a nonempty string.")
-        self.expressions: tuple[pl.Expr, ...] = canonical
+        self.expression: tuple[pl.Expr, ...] = canonical
         self.drop: tuple[str, ...] = tuple(drop or ())
         self.name: str | None = name
         report(self, verbosity, f"Validated {len(canonical)} expression(s)")
         report(self, verbosity, f"Outputs: {names}; drop: {list(self.drop)}", level=2)
 
+    def __reduce_ex__(self, protocol: SupportsIndex) -> tuple[Any, ...]:
+        """Check creating versions before restoring serialized expressions."""
+        return reduce_object(self, protocol)
+
     def __repr__(self) -> str:
         """Return the canonical specification representation."""
         return (
-            f"FeatureSpec(expressions={self.expressions!r}, "
+            f"FeatureSpec(expression={self.expression!r}, "
             f"drop={self.drop!r}, name={self.name!r})"
         )

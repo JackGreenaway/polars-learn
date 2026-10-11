@@ -59,7 +59,7 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         dict has unknown keys, or a config has invalid FeatureSpec value types.
     ValueError
         If verbosity is outside 0, 1, and 2 or a config dict fails FeatureSpec
-        validation, such as conflicting expression arguments or an empty dict.
+        validation, such as unsupported expression values or an empty dict.
 
     See Also
     --------
@@ -77,6 +77,11 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     collects a DataFrame; "polars-lazy" returns a LazyFrame, which may wrap an
     evaluated result for eager input. Fit always returns self. fit_transform
     calls fit then transform and evaluates eager feature expressions twice.
+    Pickling retains input definitions, fitted schemas, and output settings.
+    Expressions use Polars' native persistence, with cloudpickle for embedded
+    Python callbacks. Version mismatches warn before state restoration, then
+    compatible loading is attempted. Incompatible state raises SerializationError.
+    Load trusted artifacts only and validate features after upgrading.
 
     Examples
     --------
@@ -158,7 +163,7 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
             self._report(f"Applying {label}", level=2)
             labels.append(label)
             try:
-                plan = plan.with_columns(spec.expressions)
+                plan = plan.with_columns(spec.expression)
                 # Resolve each stage for precise dependency/drop errors, without
                 # materialising data until the final collect.
                 schema = plan.collect_schema()

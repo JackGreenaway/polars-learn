@@ -27,3 +27,21 @@ jobs:
         run: uv run --locked ruff format --check .
       - name: Check types
         run: uv run --locked pyright
+
+  cross-version-persistence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install Python
+        run: uv python install 3.11
+      - name: Install locked dependencies
+        run: uv sync --locked --python 3.11
+      - name: Save with the locked Polars version and load with Polars 1.35.2
+        run: |
+          uv run --locked python tests/cross_version_persistence.py write "$RUNNER_TEMP/newer.pkl"
+          uv run --locked --with polars==1.35.2 python tests/cross_version_persistence.py read "$RUNNER_TEMP/newer.pkl"
+      - name: Save with Polars 1.35.2 and load with the locked Polars version
+        run: |
+          uv run --locked --with polars==1.35.2 python tests/cross_version_persistence.py write "$RUNNER_TEMP/older.pkl"
+          uv run --locked python tests/cross_version_persistence.py read "$RUNNER_TEMP/older.pkl"
