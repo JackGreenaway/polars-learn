@@ -13,7 +13,7 @@ This keeps the preparation logic visible alongside the estimator and reduces the
 
 ## Defining features
 
-`FeatureEngineer` turns an ordered set of Polars expressions into a reusable pipeline step. Each `transform` evaluates those definitions against the incoming raw frame, so the fitted pipeline can prepare new observations whenever you call `predict`. The standalone examples below show how to define and inspect that step; in a predictive workflow, include it before the final estimator as in the quick start.
+`FeatureEngineer` turns an ordered set of Polars expressions into a reusable pipeline step. Each `transform` evaluates those definitions against the incoming raw frame, so the fitted pipeline can prepare new observations whenever you call `predict`. The standalone examples below show how to define and inspect that step; in a predictive workflow, include it before the final estimator as shown in [your first prediction pipeline](../getting-started.md#your-first-raw-data-prediction-pipeline).
 
 Create a `FeatureSpec` with one required `expression` argument: pass a single `pl.Expr` or a nonempty sequence of expressions. The specification normalizes either form to a tuple without changing your input sequence. Use native expression names, an expression's `.alias(...)`, or the specification's `alias` argument to name its outputs. An explicit `alias` requires exactly one expression with one output.
 
@@ -58,6 +58,97 @@ Existing columns can be overwritten: `FeatureSpec(pl.col("price") + 1)` replaces
 `FeatureEngineer.transform` requires the fitted input names in exactly the same order, and the resulting output names, order, and dtypes must match the fitted output schema. Input dtypes may differ if the final output schema still matches. Use a `SchemaValidator` first when input types need a defined conversion policy.
 
 Fitting eager input evaluates the feature expressions. Fitting lazy input checks the plan's schema without evaluating rows. Features do not learn statistics; use deterministic expressions. Currently `fit_transform` calls both `fit` and `transform`, so eager feature expressions are evaluated twice.
+
+## Sibling features and dependent stages
+
+Sibling features are expressions in the same `FeatureSpec`. They use the columns available at the start of that stage. Group independent calculations together, then add another specification when a calculation needs their newly created outputs.
+
+Here, `spread` and `mid` are siblings: both use the raw `ask` and `bid` columns. The next stage combines them into `relative_spread`. The final stage derives `spread_bps` from that result.
+
+```python
+import polars as pl
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+quotes = pl.DataFrame({"ask": [11.0, 22.0], "bid": [9.0, 18.0]})
+
+# Stage 1: sibling expressions share the same raw input columns.
+quote_features = FeatureSpec(
+    expression=[
+        (pl.col("ask") - pl.col("bid")).alias("spread"),
+        ((pl.col("ask") + pl.col("bid")) / 2).alias("mid"),
+    ],
+    drop=["ask", "bid"],
+    name="quote_features",
+)
+
+# Stage 2: both sibling outputs now exist and can be combined.
+relative_spread = FeatureSpec(
+    pl.col("spread") / pl.col("mid"),
+    alias="relative_spread",
+    name="relative_spread",
+)
+
+# Stage 3: use the previous stage's output and drop intermediates afterward.
+spread_bps = FeatureSpec(
+    pl.col("relative_spread") * 10_000,
+    alias="spread_bps",
+    drop=["spread", "mid", "relative_spread"],
+    name="spread_bps",
+)
+
+# Join the stages together in their dependency order.
+engineer = FeatureEngineer([quote_features, relative_spread, spread_bps])
+result = engineer.fit_transform(quotes)
+assert result.to_dict(as_series=False) == {"spread_bps": [2000.0, 2000.0]}
+assert engineer.get_feature_names_out().tolist() == ["spread_bps"]
+```
+
+| Stage | Reads | Creates | Drops after calculation |
+| --- | --- | --- | --- |
+| Sibling quote features | `ask`, `bid` | `spread`, `mid` | `ask`, `bid` |
+| Relative spread | `spread`, `mid` | `relative_spread` | None |
+| Basis-point spread | `relative_spread` | `spread_bps` | `spread`, `mid`, `relative_spread` |
+
+The input rows `(ask=11, bid=9)` and `(ask=22, bid=18)` both have a spread equal to 20% of their midpoint, producing 2,000 basis points. Only `spread_bps` remains in the output because the final stage drops the intermediate features. Omit those drops if your model should also receive the intermediates.
+
+!!! note "A sibling cannot read a new sibling output"
+    Put `spread` and `mid` in one specification, then compute `relative_spread` in the next. Adding the ratio as a third expression in the first specification would try to read columns that do not exist yet. Expressions in a single specification do not execute as sequential assignments.
+
+To include the joined stages in a model, use a feature engineer containing the joined stages as a pipeline step. This standalone example keeps the relative spread as the model feature:
+
+```python
+import numpy as np
+import polars as pl
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import Pipeline
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+quote_features = FeatureSpec(
+    [
+        (pl.col("ask") - pl.col("bid")).alias("spread"),
+        ((pl.col("ask") + pl.col("bid")) / 2).alias("mid"),
+    ]
+)
+relative_spread = FeatureSpec(
+    pl.col("spread") / pl.col("mid"),
+    alias="relative_spread",
+    drop=["ask", "bid", "spread", "mid"],
+)
+engineer = FeatureEngineer([quote_features, relative_spread])
+pipeline = Pipeline([("features", engineer), ("model", LinearRegression())])
+
+raw_train = pl.DataFrame({"ask": [11.0, 12.0, 14.0], "bid": [9.0, 8.0, 6.0]})
+pipeline.fit(raw_train, np.array([1.0, 2.0, 4.0]))
+
+# Supply raw quotes; the pipeline computes siblings, combines them, and predicts.
+raw_predict = pl.DataFrame({"ask": [13.0], "bid": [7.0]})
+predictions = pipeline.predict(raw_predict)
+assert np.allclose(predictions, [3.0])
+```
+
+This pipeline uses two stages and retains `relative_spread` as its model input. Each prediction runs both stages on the new raw quotes before calling the fitted regressor.
 
 ## Deterministic expressions versus learned preprocessing
 

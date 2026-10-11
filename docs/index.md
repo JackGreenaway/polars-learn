@@ -4,11 +4,12 @@
 
 <p class="lead">Feature engineering in Polars. Prediction pipelines in scikit-learn.</p>
 
-Prepare tabular data with native Polars expressions and explicit schema contracts. Fit preparation with your model and reuse the same steps for every prediction.
+The power comes from the Polars API: its expressive column operations, selectors, and eager and lazy execution. `polars-learn` packages those capabilities into reusable scikit-learn-style components, so you can define data preparation once, fit it with your model, and apply the same transformations at prediction time.
 
-- Native Polars expressions for feature engineering
+- Powered by the Polars expression API for feature engineering
 - Compatible with scikit-learn estimators and pipelines
 - Explicit feature names, column order, and schema policies
+- Pandas input support through behind-the-scenes conversion to Polars
 - Open source under the MIT license
 
 <div class="docs-actions" markdown="1">
@@ -18,6 +19,8 @@ Prepare tabular data with native Polars expressions and explicit schema contract
 
 </div>
 </div>
+
+Pandas DataFrames are supported when you install `polars-learn[pandas]` and enable `convert_pandas=True` on each transformer receiving pandas input. Conversion happens behind the scenes; transformations use the Polars API and return Polars frames. See [pandas interoperability](user-guide/frames.md#optional-pandas-input) for details.
 
 ## Explore the documentation
 
@@ -70,11 +73,49 @@ Compose estimators, validate models, and save fitted pipelines.
 
 ## Why use it?
 
-- **One preparation path:** fit on raw training observations and predict from new raw observations using the same ordered feature definitions.
-- **Native expressions:** use Polars arithmetic, conditionals, selectors, and aliases instead of writing another transformer for every deterministic feature.
-- **Explicit contracts:** choose a declared schema or learn a training schema, then decide how prediction-time changes are handled.
-- **Named outputs:** preserve feature names and control eager or lazy containers at the model boundary.
-- **Reviewable artifacts:** inspect fitted schemas, configure diagnostics, and save the fitted pipeline with version-aware persistence.
+**Turn the power of the Polars API into part of your model.** `polars-learn` lets you express feature preparation with Polars, compose it with scikit-learn-style estimators, and carry that preparation through training, validation, saving, and prediction. Your model artifact can contain both the feature definitions and the estimator that consumes them.
+
+### Rich feature logic through the Polars API
+
+The transformation language is Polars itself. Combine column arithmetic, conditional expressions, string and datetime operations, casts, null handling, and selectors to describe the features your model needs. For example, calculate transaction value from price and quantity, extract calendar features from a timestamp, or build a flag from several input conditions.
+
+A `FeatureSpec` accepts native Polars expressions, including expressions that expand to multiple columns. This makes one reusable pipeline component capable of many different transformations: you supply the expressions rather than writing a new transformer class for each feature. Polars provides the expression engine; `polars-learn` supplies the estimator interface, ordered execution, and schema checks. See [defining features](user-guide/features.md#defining-features).
+
+### Build dependent features in a clear sequence
+
+Real preparation often has several stages. Compute `notional` from `price * quantity`, derive `log_notional` from the new column, then remove raw inputs that the model should not consume. Separate specifications execute in order, so later stages can use the outputs of earlier ones.
+
+Keep related independent expressions together, give outputs explicit names, and place drops after the stage that needs those columns. The feature definitions describe both the calculations and the final model input layout. The [sibling feature example](user-guide/features.md#sibling-features-and-dependent-stages) shows independent expressions grouped in one stage, their outputs combined in later stages, and the resulting feature engineer connected to a model. See [the complete prediction pipeline](getting-started.md#your-first-raw-data-prediction-pipeline).
+
+### Train and predict with the same preparation
+
+Put the feature engineer before the estimator in a `Pipeline`. Call `pipeline.fit(raw_train, y)` to train and `pipeline.predict(raw_predict)` to prepare new observations and predict. Callers can supply raw columns while the pipeline computes the required model features in the configured order.
+
+This is especially useful when a model moves from a notebook into an application: its preparation travels with it, and prediction code uses the same definitions as training. The components follow scikit-learn cloning and parameter conventions, so they can participate in cross-validation and model selection. See [estimators and pipelines](user-guide/estimators.md) and [cross-validation](examples/cross-validation.md).
+
+### Make the model's input contract explicit
+
+Feature values are only part of the contract. Names, order, and dtypes also matter. Declare an expected schema with `SchemaSpec`, learn the training schema with `SchemaValidator`, and use selectors to establish the columns and order passed to the estimator.
+
+`FeatureEngineer` records the resulting feature schema during fitting and checks it during transformation. These checks make missing columns and structural changes visible at the preparation boundary. Choose the schema and casting policies that match your application, then inspect fitted schemas and feature names when reviewing a model. See [schema contracts](user-guide/schemas.md).
+
+### Keep lazy preparation under your control
+
+Use an eager Polars DataFrame for in-memory workflows or a LazyFrame to construct a deferred preparation plan. With lazy input, structural checks use schema metadata and row evaluation can remain deferred until you collect the result or request eager output at the model boundary.
+
+The package preserves access to Polars' lazy execution model while giving preparation an estimator interface. You decide where data becomes materialized according to the receiving model's requirements. See [lazy execution](user-guide/frames.md).
+
+### Bring pandas inputs into the same workflow
+
+You can start with pandas DataFrames and still define your feature logic with the Polars API. Install `polars-learn[pandas]` and enable `convert_pandas=True` on transformers receiving pandas input. The package converts those frames to Polars behind the scenes, then applies the same preparation logic used for native Polars input.
+
+Outputs are Polars frames, with eager or lazy output controlled through `set_output`. This provides a path for existing pandas callers to use Polars-based preparation. See [pandas input support](user-guide/frames.md#optional-pandas-input).
+
+### Save preparation alongside the fitted model
+
+Save the fitted pipeline with its feature definitions, schema expectations, selected columns, and estimator. Load that artifact to reuse the preparation when predicting from new raw observations. Fitted attributes, feature names, and configurable diagnostics make the preparation inspectable as well as reusable. See [saving and loading](user-guide/persistence.md) and [production guidance](production.md).
+
+Expressions replay the logic you define. For preprocessing that must learn and retain training statistics, such as scaling or statistical imputation, add an appropriate fitted transformer to the pipeline. See [deterministic expressions versus learned preprocessing](user-guide/features.md#deterministic-expressions-versus-learned-preprocessing).
 
 ## Find the right component
 

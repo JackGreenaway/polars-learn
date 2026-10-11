@@ -1,5 +1,9 @@
 # Getting started
 
+`polars-learn` brings the power of the Polars API into scikit-learn-style pipelines. Define transformations with Polars expressions and selectors; the package manages their execution, feature names, and schema contracts through reusable fit/transform components.
+
+Polars DataFrames and LazyFrames are supported natively. Pandas DataFrames are also supported with the optional pandas dependencies and `convert_pandas=True`; they are converted to Polars behind the scenes before preparation. Outputs are Polars frames.
+
 ## Installation
 
 Install the package into your project:

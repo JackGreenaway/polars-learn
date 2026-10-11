@@ -5,7 +5,7 @@ These examples are small enough to run locally and use real package interfaces. 
 | Workflow | What it demonstrates |
 | --- | --- |
 | [Raw input to prediction](../getting-started.md#your-first-raw-data-prediction-pipeline) | Fit preprocessing and a model together; predict without supplying derived columns. |
-| [Ordered feature dependencies](../user-guide/features.md) | Build features in successive specifications and drop temporary columns. |
+| [Sibling features and ordered dependencies](../user-guide/features.md#sibling-features-and-dependent-stages) | Build features in successive specifications and drop temporary columns. |
 | [Parallel transformed and unchanged features](../user-guide/selection.md) | Combine a scaler and FeaturePassthrough in a ColumnTransformer. |
 | [Lazy feature preparation](lazy-pipeline.md) | Defer feature evaluation and collect explicitly at the model boundary. |
 | [Cross-validation](cross-validation.md) | Clone and fit the full pipeline per fold. |

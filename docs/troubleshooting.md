@@ -14,7 +14,7 @@
 | Version warnings during artifact loading | Compare the recorded creating/current versions. Validate compatibility, then use an error or ignore warning filter as appropriate. |
 | Warnings still print at verbosity 0 | Verbosity controls progress only. Use warning filters or `warn_on_conversion=False` for conversion warnings. |
 | Captured callback will not pickle | Remove captured locks/open resources or use native Polars expressions; keep callback dependencies available. |
-| Pandas input is rejected | Install the pandas extra and set `convert_pandas=True`; pandas output is unsupported. |
+| Pandas input is rejected | Follow the [pandas setup instructions](user-guide/frames.md#optional-pandas-input) and set `convert_pandas=True`; pandas output is unsupported. |
 | A parameter change did not rebuild fitted state | Refit after set_params; build a fresh instance if previous fitted state must be discarded. |
 
 See the [API exceptions](api.md#exceptions-and-warnings) for exact failure categories and the [production guide](production.md) for validation practices.

@@ -23,6 +23,10 @@ Composable expressions · Clear schema contracts · Eager and lazy execution
 
 Prepare Polars data for estimators that implement the scikit-learn interface, with reusable feature expressions, column selection, and schema validation. Use these transformers in a `sklearn.pipeline.Pipeline`, following the same fit-and-apply conventions used by scikit-learn and estimator-style libraries such as XGBoost. Work with eager `DataFrame` inputs or keep `LazyFrame` queries deferred until the model needs materialized features.
 
+The power of these transformations comes from the **Polars API**: its column expressions, selectors, and eager and lazy execution. `polars-learn` wraps those capabilities in reusable estimator-style components, keeping your Polars feature logic inside the fitted pipeline.
+
+**Pandas input is supported.** Install `polars-learn[pandas]` and set `convert_pandas=True` on each transformer receiving pandas input. Pandas DataFrames are converted to Polars behind the scenes; transformations run through the Polars API and return Polars frames. Conversion is opt-in and disabled by default.
+
 **Put feature preparation inside the pipeline.** Define your Polars expressions once with `FeatureEngineer`, train with `pipeline.fit(raw_X, y)`, and predict with `pipeline.predict(new_raw_X)`. The pipeline generates the features before the model runs, using the same definitions and execution order in both paths. You can keep feature preparation together with the model instead of maintaining separate feature-building functions and remembering to call them before each prediction.
 
 Requires Python 3.11+, Polars 1.20+, and scikit-learn 1.6+. CI runs on Python **3.11 and 3.12**, including pandas interoperability tests.
@@ -31,18 +35,19 @@ Requires Python 3.11+, Polars 1.20+, and scikit-learn 1.6+. CI runs on Python **
 
 Read the [complete documentation](https://jackgreenaway.github.io/polars-learn/) for the user guide, API reference, runnable examples, troubleshooting, and production guidance. The sources live in [docs/index.md](docs/index.md); [docs/development.md](docs/development.md) explains local preview and GitHub Pages publishing. The site becomes available after the Documentation workflow deploys successfully.
 
-## Why Put Features in the Pipeline?
+## Why use polars-learn?
 
-Feature engineering is part of the model's input preparation. Keeping it in a fitted pipeline gives training and prediction one shared preparation path: validate the raw schema, compute dependent features in order, select or drop columns, and pass the prepared frame to the estimator. New observations arrive as raw data; the pipeline prepares them at prediction time.
+**Bring the power of the Polars API into the fitted model pipeline.** Define feature logic with native Polars expressions, compose it with an estimator, and reuse the same preparation during training, validation, and prediction.
 
-| You define once                            | The fitted pipeline applies it                                     |
-| ------------------------------------------ | ------------------------------------------------------------------ |
-| Raw column and dtype requirements          | Validate incoming observations before feature preparation.         |
-| Feature expressions and their dependencies | Generate the same named features during training and prediction.   |
-| Columns to retain or drop                  | Provide the fitted feature layout to the model.                    |
-| Additional learned preprocessing           | Reuse fitted scaling or other estimator-based preprocessing steps. |
+- **Express rich transformations without a new class for every feature.** Combine arithmetic, conditions, string and datetime operations, casts, null handling, and selectors in reusable `FeatureSpec` definitions. Polars supplies the expression engine; `polars-learn` makes that logic a pipeline component.
+- **Build features in stages.** Calculate transaction value from price and quantity, derive a logarithm from that new feature, then drop raw columns. Ordered specifications make dependencies and the final feature layout explicit.
+- **Predict directly from raw observations.** Train with `pipeline.fit(raw_X, y)` and predict with `pipeline.predict(new_raw_X)`. The pipeline applies the configured feature definitions before the estimator runs.
+- **Enforce names, order, and dtypes.** Declare or learn schema contracts, select model inputs, and check the transformed schema against the fitted expectations.
+- **Use eager or lazy Polars workflows.** Prepare in-memory frames or build deferred plans, then choose where to materialize data for your estimator.
+- **Accept pandas input.** Enable `convert_pandas=True` with the pandas extra installed. Frames are converted to Polars behind the scenes, transformations use the Polars API, and outputs are Polars frames.
+- **Carry preparation with the model.** Clone components for cross-validation, inspect fitted feature names and schemas, and save the fitted pipeline with its preparation logic and estimator.
 
-This keeps the preparation logic visible alongside the estimator and reduces the chance of omitting a step or using a different feature definition in prediction code. `FeatureEngineer` executes your expressions and records schema expectations; it does not learn feature statistics. Put transformations that need learned training statistics in additional fitted pipeline steps.
+`FeatureEngineer` executes expressions and records schema expectations. Add fitted preprocessing steps for transformations that must learn and retain training statistics. Read [why use it?](docs/index.md#why-use-it) for the full breakdown and workflow links.
 
 ## Installation
 
@@ -517,7 +522,7 @@ To force value evaluation within `transform`, request `"polars"` output. `Featur
 
 ## Optional Pandas Support
 
-Install the `pandas` extra shown above, then explicitly allow conversion:
+Install `polars-learn[pandas]` as described in [Installation](#installation), then explicitly allow conversion:
 
 ```python
 import pandas as pd

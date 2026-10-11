@@ -2,11 +2,11 @@
 
 Import public classes and exceptions from `polars_learn`. This reference describes
 the implementation in this checkout. See the [getting started guide](getting-started.md) for complete
-workflows, examples, and development instructions.
+installation and a complete prediction workflow. See [Development](development.md) for repository setup and documentation builds.
 
 ## Class reference index
 
-Choose a class for its purpose, input/output examples, constructor parameters, attributes, and methods. In the top navigation, the same pages are listed under **Classes**.
+Choose a class for its purpose, input/output examples, constructor parameters, attributes, and methods. The same pages are listed under **Classes** in the documentation navigation.
 
 | Class | Purpose | Detailed reference |
 | --- | --- | --- |
@@ -82,7 +82,7 @@ Conversion follows Polars' pandas conversion semantics and discards the index.
 | Method | Return | Behavior |
 | --- | --- | --- |
 | `fit(X, y=None)` | `self` | Validate or learn the class-specific contract. Ignores `y`. Repeated fitting replaces learned state after validation succeeds. |
-| `transform(X)` | DataFrame or LazyFrame | Apply a fitted transformer; output follows the table above. |
+| `transform(X)` | DataFrame or LazyFrame | Apply a fitted transformer; output follows the [Input and Output](#input-and-output) configuration. |
 | `fit_transform(X, y=None, **fit_params)` | DataFrame or LazyFrame | Call `fit` then `transform`. Extra keyword parameters are unsupported and raise `TypeError`. |
 | `get_feature_names_out(input_features=None)` | NumPy object array of strings | Return a copy of fitted output names. If supplied, input names must exactly match the fitted input names and order. |
 | `get_params(deep=True)` | dict | Read constructor parameters using scikit-learn's estimator API. Output configuration is set separately with `set_output`. |
@@ -101,7 +101,7 @@ All five transformers expose these fitted attributes:
 | --- | --- |
 | `feature_names_in_` | NumPy object array of all input names observed during fitting, in input order. |
 | `n_features_in_` | Number of columns observed during fitting, including extras and unselected columns. |
-| `output_features_` | NumPy object array of output names, with the class-specific extra-column behavior described below. |
+| `output_features_` | NumPy object array of output names, with the extra-column behavior documented in each [class reference](#class-reference-index). |
 
 Constructor parameters are retained for cloning. Cloning discards fitted
 attributes. Configuration that changes names or schemas should be followed by

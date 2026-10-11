@@ -41,7 +41,17 @@ Inspect lazy output with `plan.collect_schema()` for names and dtypes, and `plan
 
 ## Optional pandas input
 
-Install the `pandas` extra shown above, then explicitly allow conversion:
+Pandas DataFrames are supported through behind-the-scenes conversion to a Polars DataFrame. Feature transformations then use the same Polars API as native input, and the output is a Polars frame. Enable conversion on each transformer that receives pandas input.
+
+Install the optional pandas dependencies:
+
+```bash
+uv add 'polars-learn[pandas]'
+# Or use pip:
+pip install 'polars-learn[pandas]'
+```
+
+See [installation](../getting-started.md#installation) for the package requirements. Then explicitly allow conversion on the transformer:
 
 ```python
 import pandas as pd

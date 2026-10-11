@@ -346,4 +346,4 @@ The assertions in the example verify the output against the implementation. Pyth
 
 ## Practical notes
 
-Permissive casts may lose information even when successful; choose the policy for your data contract. Missing required columns still fail. Lazy value checks execute at collection, and nullability is not learned. Consult the reference below for the exact widening and precision rules.
+Permissive casts may lose information even when successful; choose the policy for your data contract. Missing required columns still fail. Lazy value checks execute at collection, and nullability is not learned. Consult the [class reference](#reference) and [casting policy details](../user-guide/schemas.md#learn-the-training-schema) for the exact widening and precision rules.
