@@ -3,34 +3,41 @@
 <!-- BEGIN GENERATED REFERENCE -->
 ## Reference
 
-<div class="api-signature"><code>class polars_learn.FeatureSpec(expression, *, alias=None, drop=None, name=None, verbosity=0)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L267">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
+    expression,
+    *,
+    alias=None,
+    drop=None,
+    name=None,
+    verbosity=0,
+)</code></pre></div>
 
 Describe a native Polars feature operation.
 
 ### Parameters
 
 <dl class="api-fields">
-<dt>expression : polars.Expr or sequence of polars.Expr</dt><dd>Single expression or nonempty sequence evaluated together, normalized to a tuple. Native output names are used unless <code>alias</code> is set. Sibling expressions cannot depend on outputs created within the same specification.</dd>
-<dt>alias : str or None, default=None</dt><dd>Override the output name of a single expression. Multiple expressions or an expression expanding to multiple outputs cannot use this option.</dd>
-<dt>drop : sequence of str or None, default=None</dt><dd>Columns to remove after evaluating the expressions. Missing names fail during execution; later specifications cannot use dropped columns.</dd>
-<dt>verbosity : {0, 1, 2}, default=0</dt><dd>Print validation summaries at 1 and output/drop details at 2.</dd>
-<dt>name : str or None, default=None</dt><dd>Descriptive label included in feature execution errors.</dd>
+<dt><code class="api-field-name">expression</code> <span class="api-field-type">polars.Expr or sequence of polars.Expr</span></dt><dd><p>Single expression or nonempty sequence evaluated together, normalized to a tuple. Native output names are used unless <code>alias</code> is set. Sibling expressions cannot depend on outputs created within the same specification.</p></dd>
+<dt><code class="api-field-name">alias</code> <span class="api-field-type">str or None, default=None</span></dt><dd><p>Override the output name of a single expression. Multiple expressions or an expression expanding to multiple outputs cannot use this option.</p></dd>
+<dt><code class="api-field-name">drop</code> <span class="api-field-type">sequence of str or None, default=None</span></dt><dd><p>Columns to remove after evaluating the expressions. Missing names fail during execution; later specifications cannot use dropped columns.</p></dd>
+<dt><code class="api-field-name">verbosity</code> <span class="api-field-type">{0, 1, 2}, default=0</span></dt><dd><p>Print validation summaries at 1 and output/drop details at 2.</p></dd>
+<dt><code class="api-field-name">name</code> <span class="api-field-type">str or None, default=None</span></dt><dd><p>Descriptive label included in feature execution errors.</p></dd>
 </dl>
 
 ### Attributes
 
 <dl class="api-fields">
-<dt>expression : tuple of polars.Expr</dt><dd>Canonical expression representation, including any explicit alias.</dd>
-<dt>drop : tuple of str</dt><dd>Columns to drop after evaluating this specification.</dd>
-<dt>name : str or None</dt><dd>Optional debugging label.</dd>
-<dt>verbosity : int</dt><dd>Configured diagnostic level, independent of the feature engineer.</dd>
+<dt><code class="api-field-name">expression</code> <span class="api-field-type">tuple of polars.Expr</span></dt><dd><p>Canonical expression representation, including any explicit alias.</p></dd>
+<dt><code class="api-field-name">drop</code> <span class="api-field-type">tuple of str</span></dt><dd><p>Columns to drop after evaluating this specification.</p></dd>
+<dt><code class="api-field-name">name</code> <span class="api-field-type">str or None</span></dt><dd><p>Optional debugging label.</p></dd>
+<dt><code class="api-field-name">verbosity</code> <span class="api-field-type">int</span></dt><dd><p>Configured diagnostic level, independent of the feature engineer.</p></dd>
 </dl>
 
 ### Raises
 
 <dl class="api-fields">
-<dt>TypeError</dt><dd>If expressions, drop columns, containers, or verbosity have invalid types.</dd>
-<dt>ValueError</dt><dd>If the expression sequence is empty, an explicit alias is ambiguous, output names are duplicated, a label is invalid, or verbosity is outside the supported levels.</dd>
+<dt><code class="api-field-name">TypeError</code></dt><dd><p>If expressions, drop columns, containers, or verbosity have invalid types.</p></dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If the expression sequence is empty, an explicit alias is ambiguous, output names are duplicated, a label is invalid, or verbosity is outside the supported levels.</p></dd>
 </dl>
 
 ### Notes

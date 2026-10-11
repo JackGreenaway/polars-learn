@@ -42,6 +42,52 @@ def signature(obj):
     )
 
 
+def signature_block(obj, name, *, is_class=False):
+    parameters = []
+    keyword_separator = False
+    for param in inspect.signature(obj).parameters.values():
+        if param.name == "self":
+            continue
+        if param.kind == inspect.Parameter.KEYWORD_ONLY and not keyword_separator:
+            parameters.append("*")
+            keyword_separator = True
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            keyword_separator = True
+        parameters.append(str(param.replace(annotation=inspect.Parameter.empty)))
+    label = "class " if is_class else ""
+    prefix = "polars_learn." if is_class else ""
+    rendered_name = (
+        f'<span class="api-keyword">{label}</span>'
+        f'<span class="api-module">{prefix}</span>'
+        f'<span class="api-name">{html.escape(name)}</span>'
+    )
+    if is_class or len(parameters) > 2:
+        arguments = "\n".join("    " + html.escape(p) + "," for p in parameters)
+        call = f"{rendered_name}(\n{arguments}\n)"
+    else:
+        call = f"{rendered_name}({html.escape(', '.join(parameters))})"
+    source_path = Path(inspect.getsourcefile(obj)).resolve()
+    package_root = ROOT / "src"
+    if source_path.is_relative_to(package_root):
+        line = inspect.getsourcelines(obj)[1]
+        source_url = (
+            "https://github.com/JackGreenaway/polars-learn/blob/main/"
+            f"{source_path.relative_to(ROOT).as_posix()}#L{line}"
+        )
+        source_label = "[source]"
+    else:
+        source_url = (
+            "https://scikit-learn.org/stable/modules/generated/"
+            f"sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator.{name}"
+        )
+        source_label = "[inherited API]"
+    return (
+        '<div class="api-signature">'
+        f'<a class="api-source" href="{source_url}">{source_label}</a>'
+        f"<pre><code>{call}</code></pre></div>\n"
+    )
+
+
 def inline(text):
     text = html.escape(text)
     return re.sub(r"``(.*?)``", r"<code>\1</code>", text)
@@ -61,7 +107,13 @@ def render_doc(doc, level):
                 lines = entry.splitlines()
                 term = lines[0]
                 description = " ".join(line.strip() for line in lines[1:])
-                output.append(f"<dt>{inline(term)}</dt><dd>{inline(description)}</dd>")
+                field_name, separator, field_type = term.partition(" : ")
+                label = f'<code class="api-field-name">{inline(field_name)}</code>'
+                if separator:
+                    label += (
+                        f' <span class="api-field-type">{inline(field_type)}</span>'
+                    )
+                output.append(f"<dt>{label}</dt><dd><p>{inline(description)}</p></dd>")
             output.append("</dl>\n")
         else:
             output.append(body.replace("``", "`").strip() + "\n")
@@ -159,8 +211,7 @@ def reference(cls):
     name = cls.__name__
     output = [
         "## Reference\n",
-        f'<div class="api-signature"><code>class '
-        f"polars_learn.{name}{html.escape(signature(cls))}</code></div>\n",
+        signature_block(cls, name, is_class=True),
         render_doc(inspect.getdoc(cls) or "", 3),
     ]
     if name == "FeatureSpec":
@@ -180,13 +231,10 @@ def reference(cls):
             )
         output.append("")
         for method in METHODS:
-            output.append(f"### {method} {{#{method.replace('_', '-')}}}\n")
             output.append(
-                f"<div "
-                f'class="api-signature"><code>'
-                f"{html.escape(method + signature(getattr(cls, method)))}"
-                "</code></div>\n"
+                f"### {method} {{#{method.replace('_', '-')} .api-method-title}}\n"
             )
+            output.append(signature_block(getattr(cls, method), method))
             output.append(render_doc(method_doc(cls, method), 4))
     output.append(
         "### See also\n\n[Shared estimator "
@@ -220,6 +268,29 @@ def main():
             )
         if not args.check:
             path.write_text(updated)
+    api_path = ROOT / "docs" / "api.md"
+    api = api_path.read_text()
+    for name in CLASSES:
+        start = f"<!-- BEGIN SIGNATURE:{name} -->"
+        end = f"<!-- END SIGNATURE:{name} -->"
+        if start not in api or end not in api:
+            raise ValueError(f"Missing signature markers for {name}")
+        block = (
+            start
+            + "\n"
+            + signature_block(getattr(polars_learn, name), name, is_class=True)
+            + end
+        )
+        api = re.sub(
+            re.escape(start) + r".*?" + re.escape(end),
+            lambda _, replacement=block: replacement,
+            api,
+            flags=re.S,
+        )
+    if args.check and api != api_path.read_text():
+        raise ValueError("Stale API signatures; run scripts/build_api_reference.py")
+    if not args.check:
+        api_path.write_text(api)
     print("All six class references match source signatures and docstrings.")
 
 

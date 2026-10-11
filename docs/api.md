@@ -109,16 +109,16 @@ fitting again rather than assuming existing fitted attributes were reset.
 
 ## ColumnSelector
 
-```text
-ColumnSelector(
+<!-- BEGIN SIGNATURE:ColumnSelector -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L23">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">ColumnSelector</span>(
     columns,
     *,
     rename=None,
     convert_pandas=False,
     warn_on_conversion=True,
     verbosity=0,
-)
-```
+)</code></pre></div>
+<!-- END SIGNATURE:ColumnSelector -->
 
 | Parameter | Contract |
 | --- | --- |
@@ -152,15 +152,15 @@ assert selector.get_feature_names_out().tolist() == ["value", "a"]
 
 ## FeaturePassthrough
 
-```text
-FeaturePassthrough(
+<!-- BEGIN SIGNATURE:FeaturePassthrough -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/passthrough.py#L8">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeaturePassthrough</span>(
     columns,
     *,
     convert_pandas=False,
     warn_on_conversion=True,
     verbosity=0,
-)
-```
+)</code></pre></div>
+<!-- END SIGNATURE:FeaturePassthrough -->
 
 `columns` is a nonempty sequence of unique, nonempty string names, in output
 order. A bare string is invalid. Only the selected columns are returned, with
@@ -202,18 +202,18 @@ assert keep.get_feature_names_out().tolist() == ["flag", "id"]
 
 ## SchemaSpec
 
-```text
-SchemaSpec(
+<!-- BEGIN SIGNATURE:SchemaSpec -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L16">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaSpec</span>(
     schema,
     *,
     allow_extra_columns=False,
     enforce_column_order=True,
-    extra_columns="preserve",
+    extra_columns=&#x27;preserve&#x27;,
     convert_pandas=False,
     warn_on_conversion=True,
     verbosity=0,
-)
-```
+)</code></pre></div>
+<!-- END SIGNATURE:SchemaSpec -->
 
 | Parameter | Contract |
 | --- | --- |
@@ -249,18 +249,18 @@ assert contract.fit_transform(X).columns == ["x"]
 
 ## SchemaValidator
 
-```text
-SchemaValidator(
-    mode="strict",
+<!-- BEGIN SIGNATURE:SchemaValidator -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L317">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
+    mode=&#x27;strict&#x27;,
     *,
     allow_extra_columns=False,
     enforce_column_order=True,
-    extra_columns="preserve",
+    extra_columns=&#x27;preserve&#x27;,
     convert_pandas=False,
     warn_on_conversion=True,
     verbosity=0,
-)
-```
+)</code></pre></div>
+<!-- END SIGNATURE:SchemaValidator -->
 
 | Parameter | Contract |
 | --- | --- |
@@ -317,16 +317,16 @@ assert validator.get_feature_names_out().tolist() == ["x"]
 
 ## FeatureSpec
 
-```text
-FeatureSpec(
+<!-- BEGIN SIGNATURE:FeatureSpec -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L267">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
     expression,
     *,
     alias=None,
     drop=None,
     name=None,
     verbosity=0,
-)
-```
+)</code></pre></div>
+<!-- END SIGNATURE:FeatureSpec -->
 
 | Parameter | Contract |
 | --- | --- |
@@ -357,15 +357,15 @@ Use `FeatureEngineer` as a preprocessing step before a predictive estimator. Def
 
 The fitted raw input names/order and resulting feature schema remain the contract. Prediction callers provide required raw columns, not precomputed derived columns. `FeatureEngineer` replays expressions and validates schemas; learned preprocessing statistics must come from other fitted pipeline steps.
 
-```text
-FeatureEngineer(
+<!-- BEGIN SIGNATURE:FeatureEngineer -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L21">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureEngineer</span>(
     features,
     *,
     convert_pandas=False,
     warn_on_conversion=True,
     verbosity=0,
-)
-```
+)</code></pre></div>
+<!-- END SIGNATURE:FeatureEngineer -->
 
 `features` accepts a single `FeatureSpec`, a dict of `FeatureSpec` keyword
 arguments, or an ordered sequence mixing these two forms. Single definitions are

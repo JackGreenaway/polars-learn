@@ -3,34 +3,41 @@
 <!-- BEGIN GENERATED REFERENCE -->
 ## Reference
 
-<div class="api-signature"><code>class polars_learn.ColumnSelector(columns, *, rename=None, convert_pandas=False, warn_on_conversion=True, verbosity=0)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L23">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">ColumnSelector</span>(
+    columns,
+    *,
+    rename=None,
+    convert_pandas=False,
+    warn_on_conversion=True,
+    verbosity=0,
+)</code></pre></div>
 
 Select and optionally rename columns in a Polars DataFrame or LazyFrame.
 
 ### Parameters
 
 <dl class="api-fields">
-<dt>columns : sequence of str</dt><dd>Nonempty ordered sequence of unique, nonempty input column names to keep.</dd>
-<dt>rename : dict of str to str, default=None</dt><dd>Optional mapping from selected source names to nonempty output names. Final output names, including unchanged names, must remain unique.</dd>
-<dt>convert_pandas : bool, default=False</dt><dd>Allow pandas DataFrames and convert them to Polars. Requires pandas; some dtypes also require PyArrow.</dd>
-<dt>verbosity : {0, 1, 2}, default=0</dt><dd>Print progress at 1 and schema/operation details at 2; 0 is silent.</dd>
-<dt>warn_on_conversion : bool, default=True</dt><dd>Emit <code>PandasConversionWarning</code> when converting pandas input.</dd>
+<dt><code class="api-field-name">columns</code> <span class="api-field-type">sequence of str</span></dt><dd><p>Nonempty ordered sequence of unique, nonempty input column names to keep.</p></dd>
+<dt><code class="api-field-name">rename</code> <span class="api-field-type">dict of str to str, default=None</span></dt><dd><p>Optional mapping from selected source names to nonempty output names. Final output names, including unchanged names, must remain unique.</p></dd>
+<dt><code class="api-field-name">convert_pandas</code> <span class="api-field-type">bool, default=False</span></dt><dd><p>Allow pandas DataFrames and convert them to Polars. Requires pandas; some dtypes also require PyArrow.</p></dd>
+<dt><code class="api-field-name">verbosity</code> <span class="api-field-type">{0, 1, 2}, default=0</span></dt><dd><p>Print progress at 1 and schema/operation details at 2; 0 is silent.</p></dd>
+<dt><code class="api-field-name">warn_on_conversion</code> <span class="api-field-type">bool, default=True</span></dt><dd><p>Emit <code>PandasConversionWarning</code> when converting pandas input.</p></dd>
 </dl>
 
 ### Attributes
 
 <dl class="api-fields">
-<dt>feature_names_in_ : ndarray of str, dtype=object</dt><dd>All training input column names in input order, including unselected names.</dd>
-<dt>n_features_in_ : int</dt><dd>Number of all training input columns.</dd>
-<dt>columns_ : tuple of str</dt><dd>Selected source names recorded by fit.</dd>
-<dt>output_features_ : ndarray of str, dtype=object</dt><dd>Selected output names after renaming, in selection order.</dd>
+<dt><code class="api-field-name">feature_names_in_</code> <span class="api-field-type">ndarray of str, dtype=object</span></dt><dd><p>All training input column names in input order, including unselected names.</p></dd>
+<dt><code class="api-field-name">n_features_in_</code> <span class="api-field-type">int</span></dt><dd><p>Number of all training input columns.</p></dd>
+<dt><code class="api-field-name">columns_</code> <span class="api-field-type">tuple of str</span></dt><dd><p>Selected source names recorded by fit.</p></dd>
+<dt><code class="api-field-name">output_features_</code> <span class="api-field-type">ndarray of str, dtype=object</span></dt><dd><p>Selected output names after renaming, in selection order.</p></dd>
 </dl>
 
 ### Raises
 
 <dl class="api-fields">
-<dt>TypeError</dt><dd>If columns, rename, or common options have invalid types.</dd>
-<dt>ValueError</dt><dd>If selected or final renamed names are duplicated, rename keys are unselected, or verbosity is outside 0, 1, and 2.</dd>
+<dt><code class="api-field-name">TypeError</code></dt><dd><p>If columns, rename, or common options have invalid types.</p></dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If selected or final renamed names are duplicated, rename keys are unselected, or verbosity is outside 0, 1, and 2.</p></dd>
 </dl>
 
 ### Notes
@@ -50,30 +57,30 @@ by default. Use set_output to force an eager or lazy output container.
 | [set_params(**params)](#set-params) | Set constructor parameters using scikit-learn conventions. |
 | [set_output(*, transform=None)](#set-output) | Configure native output without automatic container conversion. |
 
-### fit {#fit}
+### fit {#fit .api-method-title}
 
-<div class="api-signature"><code>fit(X, y=None)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L144">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Check selected columns and record input and output names.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame</dt><dd>Input containing every selected column. Other columns and a different input order are allowed. Pandas requires conversion enabled.</dd>
-<dt>y : object, default=None</dt><dd>Ignored; accepted for scikit-learn compatibility.</dd>
+<dt><code class="api-field-name">X</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Input containing every selected column. Other columns and a different input order are allowed. Pandas requires conversion enabled.</p></dd>
+<dt><code class="api-field-name">y</code> <span class="api-field-type">object, default=None</span></dt><dd><p>Ignored; accepted for scikit-learn compatibility.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>self : ColumnSelector</dt><dd>Fitted selector. Dtypes are not learned or validated.</dd>
+<dt><code class="api-field-name">self</code> <span class="api-field-type">ColumnSelector</span></dt><dd><p>Fitted selector. Dtypes are not learned or validated.</p></dd>
 </dl>
 
 #### Raises
 
 <dl class="api-fields">
-<dt>TypeError</dt><dd>If input, options, or column/rename parameter types are unsupported.</dd>
-<dt>ValueError</dt><dd>If configuration is invalid or selected columns are missing.</dd>
+<dt><code class="api-field-name">TypeError</code></dt><dd><p>If input, options, or column/rename parameter types are unsupported.</p></dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If configuration is invalid or selected columns are missing.</p></dd>
 </dl>
 
 #### Notes
@@ -81,30 +88,30 @@ Check selected columns and record input and output names.
 Lazy input is checked through schema metadata without collecting rows.
 Output configuration does not change the return from fit.
 
-### transform {#transform}
+### transform {#transform .api-method-title}
 
-<div class="api-signature"><code>transform(X)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L217">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
 Select fitted columns, rename them, and verify output names.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame</dt><dd>Input containing the selected fitted columns. Unselected columns are ignored; input order and dtypes may differ from fitting. Pandas requires conversion enabled.</dd>
+<dt><code class="api-field-name">X</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Input containing the selected fitted columns. Unselected columns are ignored; input order and dtypes may differ from fitting. Pandas requires conversion enabled.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>X_selected : polars.DataFrame or polars.LazyFrame</dt><dd>Selected columns in configured order, including renames. Default preserves input kind; set_output can force eager or lazy output.</dd>
+<dt><code class="api-field-name">X_selected</code> <span class="api-field-type">polars.DataFrame or polars.LazyFrame</span></dt><dd><p>Selected columns in configured order, including renames. Default preserves input kind; set_output can force eager or lazy output.</p></dd>
 </dl>
 
 #### Raises
 
 <dl class="api-fields">
-<dt>sklearn.exceptions.NotFittedError</dt><dd>If fit has not completed successfully.</dd>
-<dt>TypeError</dt><dd>If input or parameter types are unsupported.</dd>
-<dt>ValueError</dt><dd>If selected columns are missing, configuration is invalid, or renamed output names differ from fitting.</dd>
+<dt><code class="api-field-name">sklearn.exceptions.NotFittedError</code></dt><dd><p>If fit has not completed successfully.</p></dd>
+<dt><code class="api-field-name">TypeError</code></dt><dd><p>If input or parameter types are unsupported.</p></dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If selected columns are missing, configuration is invalid, or renamed output names differ from fitting.</p></dd>
 </dl>
 
 #### Notes
@@ -113,91 +120,95 @@ Lazy metadata errors occur now; source/value errors can occur when a
 returned plan is collected. Explicit eager output collects within this
 method. Source and collection errors are not wrapped.
 
-### fit_transform {#fit-transform}
+### fit_transform {#fit-transform .api-method-title}
 
-<div class="api-signature"><code>fit_transform(X, y=None, **fit_params)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L188">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
+    X,
+    y=None,
+    **fit_params,
+)</code></pre></div>
 
 Fit and transform the same input using the configured return kind.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame</dt><dd>Input accepted by fit and transform. Pandas requires conversion enabled.</dd>
-<dt>y : object, default=None</dt><dd>Ignored; accepted for scikit-learn compatibility.</dd>
-<dt>**fit_params : dict</dt><dd>Extra fit parameters are unsupported and raise TypeError.</dd>
+<dt><code class="api-field-name">X</code> <span class="api-field-type">polars.DataFrame, polars.LazyFrame or pandas.DataFrame</span></dt><dd><p>Input accepted by fit and transform. Pandas requires conversion enabled.</p></dd>
+<dt><code class="api-field-name">y</code> <span class="api-field-type">object, default=None</span></dt><dd><p>Ignored; accepted for scikit-learn compatibility.</p></dd>
+<dt><code class="api-field-name">**fit_params</code> <span class="api-field-type">dict</span></dt><dd><p>Extra fit parameters are unsupported and raise TypeError.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>X_transformed : polars.DataFrame or polars.LazyFrame</dt><dd>Transformed input. Default preserves input kind; set_output can force an eager DataFrame or LazyFrame. Converted pandas is eager.</dd>
+<dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame or polars.LazyFrame</span></dt><dd><p>Transformed input. Default preserves input kind; set_output can force an eager DataFrame or LazyFrame. Converted pandas is eager.</p></dd>
 </dl>
 
-### get_feature_names_out {#get-feature-names-out}
+### get_feature_names_out {#get-feature-names-out .api-method-title}
 
-<div class="api-signature"><code>get_feature_names_out(input_features=None)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L162">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_feature_names_out</span>(input_features=None)</code></pre></div>
 
 Return the fitted output column names.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>input_features : array-like of str or None, default=None</dt><dd>If supplied, names must exactly match <code>feature_names_in_</code>.</dd>
+<dt><code class="api-field-name">input_features</code> <span class="api-field-type">array-like of str or None, default=None</span></dt><dd><p>If supplied, names must exactly match <code>feature_names_in_</code>.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>feature_names_out : ndarray of shape (n_features_out_,), dtype=object</dt><dd>Copy of fitted output names. SchemaValidator excludes inference-only extras. SchemaSpec includes preserved training extras. A selector lists selected names, including any renames; a passthrough lists unchanged selected names. An engineer lists all output names.</dd>
+<dt><code class="api-field-name">feature_names_out</code> <span class="api-field-type">ndarray of shape (n_features_out_,), dtype=object</span></dt><dd><p>Copy of fitted output names. SchemaValidator excludes inference-only extras. SchemaSpec includes preserved training extras. A selector lists selected names, including any renames; a passthrough lists unchanged selected names. An engineer lists all output names.</p></dd>
 </dl>
 
 #### Raises
 
 <dl class="api-fields">
-<dt>sklearn.exceptions.NotFittedError</dt><dd>If the transformer has not been fitted.</dd>
-<dt>ValueError</dt><dd>If supplied input names differ from fitted names or order.</dd>
+<dt><code class="api-field-name">sklearn.exceptions.NotFittedError</code></dt><dd><p>If the transformer has not been fitted.</p></dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If supplied input names differ from fitted names or order.</p></dd>
 </dl>
 
-### get_params {#get-params}
+### get_params {#get-params .api-method-title}
 
-<div class="api-signature"><code>get_params(deep=True)</code></div>
+<div class="api-signature"><a class="api-source" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator.get_params">[inherited API]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_params</span>(deep=True)</code></pre></div>
 
 Get estimator constructor parameters.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>deep : bool, default=True</dt><dd>Include nested estimator parameters when present.</dd>
+<dt><code class="api-field-name">deep</code> <span class="api-field-type">bool, default=True</span></dt><dd><p>Include nested estimator parameters when present.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>params : dict</dt><dd>Constructor parameters and, when requested, nested parameters. Output configuration is managed separately by set_output.</dd>
+<dt><code class="api-field-name">params</code> <span class="api-field-type">dict</span></dt><dd><p>Constructor parameters and, when requested, nested parameters. Output configuration is managed separately by set_output.</p></dd>
 </dl>
 
-### set_params {#set-params}
+### set_params {#set-params .api-method-title}
 
-<div class="api-signature"><code>set_params(**params)</code></div>
+<div class="api-signature"><a class="api-source" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator.set_params">[inherited API]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_params</span>(**params)</code></pre></div>
 
 Set constructor parameters using scikit-learn conventions.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>**params : dict</dt><dd>Constructor parameter names and values. Nested estimator parameters use the step__parameter convention where supported.</dd>
+<dt><code class="api-field-name">**params</code> <span class="api-field-type">dict</span></dt><dd><p>Constructor parameter names and values. Nested estimator parameters use the step__parameter convention where supported.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>self : estimator instance</dt><dd>This estimator with updated configuration.</dd>
+<dt><code class="api-field-name">self</code> <span class="api-field-type">estimator instance</span></dt><dd><p>This estimator with updated configuration.</p></dd>
 </dl>
 
 #### Raises
 
 <dl class="api-fields">
-<dt>ValueError</dt><dd>If a parameter name is unknown.</dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If a parameter name is unknown.</p></dd>
 </dl>
 
 #### Notes
@@ -206,28 +217,28 @@ Changing parameters does not immediately validate configuration or clear
 fitted attributes. Refit after contract changes. Invalid parameter values
 fail at the next relevant fit or transform operation.
 
-### set_output {#set-output}
+### set_output {#set-output .api-method-title}
 
-<div class="api-signature"><code>set_output(*, transform=None)</code></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L195">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_output</span>(*, transform=None)</code></pre></div>
 
 Configure native output without automatic container conversion.
 
 #### Parameters
 
 <dl class="api-fields">
-<dt>transform : {&quot;default&quot;, &quot;polars&quot;, &quot;polars-lazy&quot;} or None, default=None</dt><dd>Default preserves the input kind. &quot;polars&quot; collects an eager DataFrame; &quot;polars-lazy&quot; returns a LazyFrame. <code>None</code> leaves the configuration unchanged. Pandas output is unsupported.</dd>
+<dt><code class="api-field-name">transform</code> <span class="api-field-type">{&quot;default&quot;, &quot;polars&quot;, &quot;polars-lazy&quot;} or None, default=None</span></dt><dd><p>Default preserves the input kind. &quot;polars&quot; collects an eager DataFrame; &quot;polars-lazy&quot; returns a LazyFrame. <code>None</code> leaves the configuration unchanged. Pandas output is unsupported.</p></dd>
 </dl>
 
 #### Returns
 
 <dl class="api-fields">
-<dt>self : estimator instance</dt><dd>This transformer.</dd>
+<dt><code class="api-field-name">self</code> <span class="api-field-type">estimator instance</span></dt><dd><p>This transformer.</p></dd>
 </dl>
 
 #### Raises
 
 <dl class="api-fields">
-<dt>ValueError</dt><dd>If an unsupported output container is requested.</dd>
+<dt><code class="api-field-name">ValueError</code></dt><dd><p>If an unsupported output container is requested.</p></dd>
 </dl>
 
 #### Notes

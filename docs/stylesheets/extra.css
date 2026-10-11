@@ -68,14 +68,69 @@ pre:has(> code.language-text)::before {
 pre:has(> code.language-python)::before { content: "PYTHON"; }
 pre:has(> code.language-bash)::before { content: "SHELL"; }
 pre:has(> code.language-text)::before { content: "SIGNATURE / TEXT"; }
+/* API reference: indented signatures and NumPy-style field lists. */
 .api-signature {
-  padding: 1rem 1.2rem;
-  margin: 1rem 0 1.5rem;
-  border-left: 4px solid var(--docs-accent);
-  border-radius: 0.25rem;
+  position: relative;
+  padding: 1.1rem 1.3rem;
+  margin: 1rem 0 1.8rem;
+  border-top: 3px solid var(--docs-accent);
+  border-radius: 0.35rem;
   background: var(--docs-soft);
-  overflow-wrap: anywhere;
 }
-.api-signature code { color: var(--bs-body-color); font-size: 0.95rem; }
-.api-fields dt { margin-top: 1rem; font-family: var(--bs-font-monospace); font-size: 0.9rem; }
-.api-fields dd { margin: 0.4rem 0 1.2rem 1.25rem; }
+.api-signature pre {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.65;
+}
+.api-signature code { color: var(--bs-body-color); font-size: 0.92rem; }
+.api-keyword { color: var(--docs-accent); font-weight: 600; }
+.api-module { color: var(--bs-secondary-color); }
+.api-name { font-weight: 700; }
+.api-source {
+  display: block;
+  text-align: right;
+  font-size: 0.78rem;
+  margin-bottom: 0.5rem;
+  color: var(--bs-secondary-color);
+}
+.api-fields { margin: 1.25rem 0 2rem; }
+.api-fields dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 1.2rem;
+  line-height: 1.6;
+}
+.api-field-name {
+  color: var(--bs-body-color);
+  background: var(--docs-soft);
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.api-field-type {
+  color: var(--bs-secondary-color);
+  font-family: var(--bs-font-sans-serif);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.api-fields dd { margin: 0.5rem 0 1.5rem 1.5rem; max-width: 75ch; }
+.api-fields dd p { margin-bottom: 0; }
+.api-method-title {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--bs-border-color);
+  font-family: var(--bs-font-monospace);
+  font-size: 1.25rem;
+}
+@media (max-width: 767px) {
+  .api-signature { padding: 0.9rem; }
+  .api-fields dd { margin-left: 0.75rem; }
+}
