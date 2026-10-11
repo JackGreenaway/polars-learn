@@ -11,6 +11,8 @@
     verbosity=0,
 )</code></pre></div>
 
+<div class="api-class-body" markdown="1">
+
 Pass explicitly selected columns through without changing their contents.
 
 ### Parameters
@@ -70,6 +72,8 @@ with eager input, a branch for each operation, and Polars output.
 
 ### fit {#fit .api-method-title}
 
+<div class="api-method-body" markdown="1">
+
 <div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L144">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Validate selected columns and record feature names.
@@ -98,7 +102,11 @@ Validate selected columns and record feature names.
 
 Lazy metadata checks do not evaluate rows. Source and collection failures propagate from Polars. Dtypes are not validated.
 
+</div>
+
 ### transform {#transform .api-method-title}
+
+<div class="api-method-body" markdown="1">
 
 <div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L217">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
@@ -128,7 +136,11 @@ Select fitted columns unchanged in configured order.
 
 Lazy metadata checks do not evaluate rows. Source and collection failures propagate from Polars. Dtypes are not validated.
 
+</div>
+
 ### fit_transform {#fit-transform .api-method-title}
+
+<div class="api-method-body" markdown="1">
 
 <div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L188">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
     X,
@@ -152,7 +164,11 @@ Fit and transform the same input using the configured return kind.
 <dt><code class="api-field-name">X_transformed</code> <span class="api-field-type">polars.DataFrame or polars.LazyFrame</span></dt><dd><p>Transformed input. Default preserves input kind; set_output can force an eager DataFrame or LazyFrame. Converted pandas is eager.</p></dd>
 </dl>
 
+</div>
+
 ### get_feature_names_out {#get-feature-names-out .api-method-title}
+
+<div class="api-method-body" markdown="1">
 
 <div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L162">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_feature_names_out</span>(input_features=None)</code></pre></div>
 
@@ -177,7 +193,11 @@ Return the fitted output column names.
 <dt><code class="api-field-name">ValueError</code></dt><dd><p>If supplied input names differ from fitted names or order.</p></dd>
 </dl>
 
+</div>
+
 ### get_params {#get-params .api-method-title}
+
+<div class="api-method-body" markdown="1">
 
 <div class="api-signature"><a class="api-source" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator.get_params">[inherited API]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">get_params</span>(deep=True)</code></pre></div>
 
@@ -195,7 +215,11 @@ Get estimator constructor parameters.
 <dt><code class="api-field-name">params</code> <span class="api-field-type">dict</span></dt><dd><p>Constructor parameters and, when requested, nested parameters. Output configuration is managed separately by set_output.</p></dd>
 </dl>
 
+</div>
+
 ### set_params {#set-params .api-method-title}
+
+<div class="api-method-body" markdown="1">
 
 <div class="api-signature"><a class="api-source" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.BaseEstimator.html#sklearn.base.BaseEstimator.set_params">[inherited API]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_params</span>(**params)</code></pre></div>
 
@@ -225,7 +249,11 @@ Changing parameters does not immediately validate configuration or clear
 fitted attributes. Refit after contract changes. Invalid parameter values
 fail at the next relevant fit or transform operation.
 
+</div>
+
 ### set_output {#set-output .api-method-title}
+
+<div class="api-method-body" markdown="1">
 
 <div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/_utils.py#L195">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">set_output</span>(*, transform=None)</code></pre></div>
 
@@ -258,9 +286,13 @@ Output choices survive cloning. None leaves the current choice intact;
 does not collect lazy rows. Forcing lazy output from eager input may
 wrap an already evaluated result; use lazy input to defer evaluation.
 
+</div>
+
 ### See also
 
 [Shared estimator conventions](../api.md#shared-transformer-behavior) · [Production guidance](../production.md) · [Persistence](../user-guide/persistence.md)
+
+</div>
 <!-- END GENERATED REFERENCE -->
 
 ## About

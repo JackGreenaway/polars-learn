@@ -1,12 +1,72 @@
+<div class="docs-hero" markdown="1">
+
 # polars-learn
 
-## Raw observations in. Model-ready features out.
+<p class="lead">Feature engineering in Polars. Prediction pipelines in scikit-learn.</p>
 
-**Native Polars feature engineering and schema validation for scikit-learn-style pipelines.** Define preparation once, fit it with your model, and reuse the same steps every time you predict.
+Prepare tabular data with native Polars expressions and explicit schema contracts. Fit preparation with your model and reuse the same steps for every prediction.
 
-A production prediction starts with raw data. `polars-learn` keeps the expressions, selected features, column order, and schema policies inside the fitted pipeline, so callers do not have to reproduce a separate feature-building function. Your preprocessing becomes an inspectable, cloneable component of the model artifact.
+- Native Polars expressions for feature engineering
+- Compatible with scikit-learn estimators and pipelines
+- Explicit feature names, column order, and schema policies
+- Open source under the MIT license
 
-[Get started](getting-started.md) · [Read the user guide](user-guide/estimators.md) · [Explore the API](api.md) · [Prepare for production](production.md)
+<div class="docs-actions" markdown="1">
+
+[Getting started](getting-started.md)
+[API reference](api.md)
+
+</div>
+</div>
+
+## Explore the documentation
+
+<div class="docs-topics" markdown="1">
+<div class="docs-topic" markdown="1">
+
+### Feature engineering
+
+Build model features from ordered Polars expressions.
+
+**Components:** [FeatureEngineer](classes/feature-engineer.md), [FeatureSpec](classes/feature-spec.md).
+
+[Feature engineering guide](user-guide/features.md)
+
+</div>
+<div class="docs-topic" markdown="1">
+
+### Schema validation
+
+Declare input contracts or learn a schema during training.
+
+**Components:** [SchemaSpec](classes/schema-spec.md), [SchemaValidator](classes/schema-validator.md).
+
+[Schema contracts guide](user-guide/schemas.md)
+
+</div>
+<div class="docs-topic" markdown="1">
+
+### Column selection
+
+Select, order, rename, and retain model inputs.
+
+**Components:** [ColumnSelector](classes/column-selector.md), [FeaturePassthrough](classes/feature-passthrough.md).
+
+[Selection and passthrough guide](user-guide/selection.md)
+
+</div>
+<div class="docs-topic" markdown="1">
+
+### Pipelines and persistence
+
+Compose estimators, validate models, and save fitted pipelines.
+
+**Workflows:** [Cross-validation](examples/cross-validation.md), [lazy prediction](examples/lazy-pipeline.md).
+
+[Production guide](production.md)
+
+</div>
+</div>
 
 ## Why use it?
 

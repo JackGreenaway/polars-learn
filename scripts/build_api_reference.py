@@ -212,6 +212,7 @@ def reference(cls):
     output = [
         "## Reference\n",
         signature_block(cls, name, is_class=True),
+        '<div class="api-class-body" markdown="1">\n',
         render_doc(inspect.getdoc(cls) or "", 3),
     ]
     if name == "FeatureSpec":
@@ -234,14 +235,17 @@ def reference(cls):
             output.append(
                 f"### {method} {{#{method.replace('_', '-')} .api-method-title}}\n"
             )
+            output.append('<div class="api-method-body" markdown="1">\n')
             output.append(signature_block(getattr(cls, method), method))
             output.append(render_doc(method_doc(cls, method), 4))
+            output.append("</div>\n")
     output.append(
         "### See also\n\n[Shared estimator "
         "conventions](../api.md#shared-transformer-behavior) · "
         "[Production guidance](../production.md) · "
         "[Persistence](../user-guide/persistence.md)\n"
     )
+    output.append("</div>\n")
     return "\n".join(output).strip()
 
 

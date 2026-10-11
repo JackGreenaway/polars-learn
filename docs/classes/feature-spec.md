@@ -12,6 +12,8 @@
     verbosity=0,
 )</code></pre></div>
 
+<div class="api-class-body" markdown="1">
+
 Describe a native Polars feature operation.
 
 ### Parameters
@@ -61,6 +63,8 @@ FeatureSpec is a description, not an estimator. It has no fit, transform, or pre
 ### See also
 
 [Shared estimator conventions](../api.md#shared-transformer-behavior) · [Production guidance](../production.md) · [Persistence](../user-guide/persistence.md)
+
+</div>
 <!-- END GENERATED REFERENCE -->
 
 ## About
