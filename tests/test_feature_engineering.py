@@ -44,7 +44,7 @@ def test_not_fitted_and_unsupported_input(frame):
         engineer().transform(frame)
     with pytest.raises(NotFittedError):
         engineer().get_feature_names_out()
-    for value in [np.ones((2, 2)), frame.lazy(), None]:
+    for value in [np.ones((2, 2)), None]:
         with pytest.raises(TypeError, match="Polars DataFrame"):
             engineer().fit(value)
 
@@ -127,3 +127,173 @@ def test_runtime_failure(frame):
     with pytest.raises(FeatureEngineeringError, match="small") as caught:
         est.transform(frame.with_columns(pl.lit(1000.0).alias("price")))
     assert caught.value.__cause__ is not None
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_single_spec_matches_sequence_and_preserves_parameter(frame, lazy):
+    spec = FeatureSpec(
+        expressions=[
+            (pl.col("price") * pl.col("quantity")).alias("notional"),
+            (pl.col("price") + 1).alias("incremented"),
+        ],
+        drop=["quantity"],
+        name="quote_features",
+    )
+    incoming = frame.lazy() if lazy else frame
+    single = FeatureEngineer(spec)
+    sequence = FeatureEngineer([spec])
+    assert single.features is spec
+    assert single.get_params()["features"] is spec
+    result = single.fit_transform(incoming)
+    expected = sequence.fit_transform(incoming)
+    assert isinstance(result, pl.LazyFrame if lazy else pl.DataFrame)
+    assert_frame_equal(
+        result.collect() if lazy else result,
+        expected.collect() if lazy else expected,
+    )
+    assert single.output_schema_ == sequence.output_schema_
+    assert (
+        single.get_feature_names_out().tolist()
+        == sequence.get_feature_names_out().tolist()
+    )
+    assert single.features is spec
+
+
+def test_single_spec_clone_and_set_params(frame):
+    spec = FeatureSpec(pl.col("price") + 1, alias="incremented")
+    fitted = FeatureEngineer(spec).set_output(transform="polars-lazy").fit(frame)
+    copied = clone(fitted)
+    assert isinstance(copied.features, FeatureSpec)
+    assert not hasattr(copied, "output_schema_")
+    result = copied.fit_transform(frame)
+    assert isinstance(result, pl.LazyFrame)
+    assert result.collect()["incremented"].to_list() == [2.0, 3.0, 4.0, 5.0]
+    later = FeatureSpec(pl.col("price") * 2, alias="doubled")
+    copied.set_params(features=[spec, later])
+    assert copied.fit_transform(frame).collect().columns[-2:] == [
+        "incremented",
+        "doubled",
+    ]
+    copied.set_params(features=later)
+    assert copied.get_params()["features"] is later
+    assert copied.fit_transform(frame).collect().columns[-1] == "doubled"
+    copied.set_params(features="bad")
+    with pytest.raises(TypeError, match="features must be a FeatureSpec"):
+        copied.fit(object())
+
+
+def test_single_spec_failure_retains_context(frame):
+    spec = FeatureSpec(pl.col("missing"), name="single_missing_input")
+    with pytest.raises(FeatureEngineeringError, match="single_missing_input") as caught:
+        FeatureEngineer(spec).fit(frame.lazy())
+    assert isinstance(caught.value.__cause__, pl.exceptions.ColumnNotFoundError)
+
+
+@pytest.mark.parametrize(
+    "features", [pl.col("price"), iter([]), [[FeatureSpec(pl.col("price"))]]]
+)
+def test_single_spec_support_does_not_accept_other_containers(features):
+    with pytest.raises(TypeError, match="features"):
+        FeatureEngineer(features)
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_dict_spec_matches_explicit_spec_without_mutating_config(frame, lazy):
+    config = {
+        "expression": pl.col("price") * pl.col("quantity"),
+        "alias": "notional",
+        "drop": ["quantity"],
+        "name": "quote_features",
+    }
+    original_expression = config["expression"]
+    original_drop = config["drop"]
+    incoming = frame.lazy() if lazy else frame
+    configured = FeatureEngineer(config)
+    result = configured.fit_transform(incoming)
+    expected = FeatureEngineer(FeatureSpec(**config)).fit_transform(incoming)
+    assert isinstance(result, pl.LazyFrame if lazy else pl.DataFrame)
+    assert_frame_equal(
+        result.collect() if lazy else result,
+        expected.collect() if lazy else expected,
+    )
+    assert configured.features is config
+    assert configured.get_params()["features"] is config
+    assert config["expression"] is original_expression
+    assert original_expression.meta.output_name() == "price"
+    assert config["drop"] is original_drop
+    assert original_drop == ["quantity"]
+
+
+def test_mixed_specs_and_dicts_preserve_dependencies_and_clone(frame):
+    features = (
+        {"expression": pl.col("price") * 2, "alias": "doubled"},
+        FeatureSpec(pl.col("doubled") + 1, alias="incremented"),
+        {
+            "expression": pl.col("incremented") * 2,
+            "alias": "final",
+            "drop": ["doubled", "incremented"],
+        },
+    )
+    original = FeatureEngineer(features).set_output(transform="polars-lazy")
+    original.fit(frame)
+    copied = clone(original)
+    assert isinstance(copied.features, tuple)
+    assert isinstance(copied.features[0], dict)
+    assert isinstance(copied.features[1], FeatureSpec)
+    assert not hasattr(copied, "output_schema_")
+    result = copied.fit_transform(frame)
+    assert isinstance(result, pl.LazyFrame)
+    assert result.collect()["final"].to_list() == [6.0, 10.0, 14.0, 18.0]
+    assert copied.get_feature_names_out().tolist() == ["price", "quantity", "final"]
+
+
+def test_dict_spec_supports_multiple_expressions_and_revalidation(frame):
+    engineer = FeatureEngineer(
+        {
+            "expressions": [pl.col("price").alias("a"), pl.col("quantity").alias("b")],
+            "drop": ["price", "quantity"],
+        }
+    )
+    assert engineer.fit_transform(frame).columns == ["a", "b"]
+    config = {"expression": pl.col("price") + 1, "alias": "incremented"}
+    engineer.set_params(features=config)
+    assert engineer.fit_transform(frame)["incremented"].to_list() == [
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+    ]
+    config["unknown"] = True
+    with pytest.raises(TypeError, match="features: invalid FeatureSpec config"):
+        engineer.fit(object())
+
+
+@pytest.mark.parametrize(
+    "config,error",
+    [
+        ({}, ValueError),
+        ({"expression": pl.col("price"), "unknown": True}, TypeError),
+        ({"expression": "price"}, TypeError),
+        (
+            {"expression": pl.col("price"), "expressions": [pl.col("quantity")]},
+            ValueError,
+        ),
+        ({"expressions": []}, ValueError),
+        ({"expression": pl.col("price"), "drop": "price"}, TypeError),
+        ({"expression": pl.col("price"), "verbosity": True}, TypeError),
+    ],
+)
+def test_bad_dict_config_fails_at_construction_with_context(config, error):
+    with pytest.raises(error, match="features: invalid FeatureSpec config") as caught:
+        FeatureEngineer(config)
+    assert isinstance(caught.value.__cause__, error)
+    with pytest.raises(error, match=r"features\[1\]: invalid FeatureSpec config"):
+        FeatureEngineer([FeatureSpec(pl.col("price")), config])
+
+
+def test_dict_spec_execution_error_keeps_configured_label(frame):
+    with pytest.raises(FeatureEngineeringError, match="configured_missing") as caught:
+        FeatureEngineer(
+            {"expression": pl.col("missing"), "name": "configured_missing"}
+        ).fit(frame.lazy())
+    assert isinstance(caught.value.__cause__, pl.exceptions.ColumnNotFoundError)

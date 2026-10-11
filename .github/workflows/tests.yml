@@ -12,18 +12,13 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.11', '3.12']
-        pandas: [false, true]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Install Python
         run: uv python install ${{ matrix.python-version }}
-      - name: Install locked core dependencies
-        if: '!matrix.pandas'
+      - name: Install locked development dependencies
         run: uv sync --locked --python ${{ matrix.python-version }}
-      - name: Install locked pandas dependencies
-        if: matrix.pandas
-        run: uv sync --locked --extra pandas --python ${{ matrix.python-version }}
       - name: Test
         run: uv run --locked pytest --doctest-modules src tests
       - name: Lint

@@ -1,6 +1,6 @@
 [project]
 name = "polars-learn"
-version = "0.1.1"
+version = "0.1.2"
 description = "Native Polars feature engineering and schema validation for scikit-learn"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,13 @@ dependencies = ["polars>=1.20", "scikit-learn>=1.6", "numpy>=1.24"]
 pandas = ["pandas>=2", "pyarrow>=14"]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.9", "pyright[nodejs]>=1.1.390"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.9",
+    "pyright[nodejs]>=1.1.390",
+    "pandas>=2",
+    "pyarrow>=14",
+]
 
 [build-system]
 requires = ["hatchling>=1.26"]

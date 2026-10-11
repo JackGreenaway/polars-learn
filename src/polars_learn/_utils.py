@@ -13,18 +13,30 @@ from sklearn.utils.validation import (
 )
 
 from .exceptions import PandasConversionWarning
-from .types import FeatureNames, OutputMode
+from .types import FeatureNames, Frame, OutputMode, Schema
 
 
-def to_polars(
-    X: object, *, convert_pandas: bool, warn_on_conversion: bool
-) -> pl.DataFrame:
+def validate_verbosity(verbosity: int) -> None:
+    """Reject unsupported diagnostic levels before doing any work."""
+    if type(verbosity) is not int:
+        raise TypeError("verbosity must be an integer (0, 1, or 2).")
+    if verbosity not in (0, 1, 2):
+        raise ValueError("verbosity must be 0, 1, or 2.")
+
+
+def report(owner: object, verbosity: int, message: str, *, level: int = 1) -> None:
+    """Emit an opt-in diagnostic without printing input values."""
+    if verbosity >= level:
+        print(f"[{type(owner).__name__}] {message}")
+
+
+def to_polars(X: object, *, convert_pandas: bool, warn_on_conversion: bool) -> Frame:
     """Validate the container and optionally convert pandas input to Polars.
 
     Parameters
     ----------
     X : object
-        Candidate eager DataFrame. NumPy arrays and LazyFrames are unsupported.
+        Candidate Polars DataFrame or LazyFrame. NumPy arrays are unsupported.
     convert_pandas : bool
         Whether pandas DataFrames may be converted with ``pl.from_pandas``.
     warn_on_conversion : bool
@@ -32,7 +44,7 @@ def to_polars(
 
     Returns
     -------
-    frame : polars.DataFrame
+    frame : polars.DataFrame or polars.LazyFrame
         Original Polars input or converted pandas DataFrame.
 
     Raises
@@ -46,7 +58,7 @@ def to_polars(
     PandasConversionWarning
         If pandas input is converted and warnings are enabled.
     """
-    if isinstance(X, pl.DataFrame):
+    if isinstance(X, (pl.DataFrame, pl.LazyFrame)):
         return X
     # Inspect the MRO so subclasses work without importing pandas for native inputs.
     if any(cls.__module__.startswith("pandas.") for cls in type(X).__mro__):
@@ -75,7 +87,14 @@ def to_polars(
                     stacklevel=3,
                 )
             return result
-    raise TypeError("Expected a Polars DataFrame (or explicitly enabled pandas input).")
+    raise TypeError(
+        "Expected a Polars DataFrame or LazyFrame (or explicitly enabled pandas input)."
+    )
+
+
+def frame_schema(frame: Frame) -> Schema:
+    """Resolve metadata without collecting a lazy query's rows."""
+    return dict(frame.collect_schema())
 
 
 class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=None):
@@ -84,6 +103,56 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
     feature_names_in_: NDArray[np.object_]
     n_features_in_: int
     output_features_: NDArray[np.object_]
+
+    verbosity: int
+
+    def _validate_options(self) -> None:
+        validate_verbosity(self.verbosity)
+        for name in (
+            "convert_pandas",
+            "warn_on_conversion",
+            "allow_extra_columns",
+            "enforce_column_order",
+        ):
+            if hasattr(self, name) and type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be a bool.")
+
+    def _report(self, message: str, *, level: int = 1) -> None:
+        report(self, self.verbosity, message, level=level)
+
+    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Any:
+        """Bridge sklearn's ndarray annotation to native container overrides.
+
+        Concrete subclasses provide precisely typed Polars implementations.
+        sklearn's mixin supports non-array outputs at runtime.
+        """
+        return cast(Any, super()).fit_transform(X, y, **fit_params)
+
+    def _report_frame(self, frame: Frame, *, stage: str) -> None:
+        if not self.verbosity:
+            return
+        schema = frame_schema(frame)
+        rows = str(frame.height) if isinstance(frame, pl.DataFrame) else "unknown"
+        suffix = (
+            " (lazy plan; values not evaluated)"
+            if isinstance(frame, pl.LazyFrame)
+            else ""
+        )
+        self._report(f"{stage}: {rows} rows, {len(schema)} columns{suffix}")
+        self._report(f"{stage} schema: {schema}", level=2)
+
+    def _collect(self, result: pl.LazyFrame) -> pl.DataFrame:
+        """Execute an explicitly requested eager result."""
+        return result.collect()
+
+    def _finish(self, result: Frame) -> Frame:
+        mode = getattr(self, "_sklearn_output_config", {}).get("transform", "default")
+        if mode == "polars" and isinstance(result, pl.LazyFrame):
+            result = self._collect(result)
+        elif mode == "polars-lazy" and isinstance(result, pl.DataFrame):
+            result = result.lazy()
+        self._report_frame(result, stage="Transform complete")
+        return result
 
     def get_feature_names_out(
         self, input_features: FeatureNames | None = None
@@ -98,8 +167,10 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
         Returns
         -------
         feature_names_out : ndarray of shape (n_features_out_,), dtype=object
-            Copy of the fitted output names. For schema validators this
-            describes required columns, excluding inference-only extras.
+            Copy of fitted output names. SchemaValidator excludes inference-only
+            extras. SchemaSpec includes preserved training extras. A selector
+            lists selected names, including any renames; a passthrough lists unchanged
+            selected names. An engineer lists all output names.
 
         Raises
         ------
@@ -121,8 +192,9 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
 
         Parameters
         ----------
-        transform : {"default", "polars"} or None, default=None
-            Both supported values return Polars DataFrames. ``None`` leaves
+        transform : {"default", "polars", "polars-lazy"} or None, default=None
+            Default preserves the input kind. "polars" collects an eager
+            DataFrame; "polars-lazy" returns a LazyFrame. ``None`` leaves
             the configuration unchanged. Pandas output is unsupported.
 
         Returns
@@ -139,7 +211,15 @@ class NativeTransformer(TransformerMixin, BaseEstimator, auto_wrap_output_keys=N
         -----
         Automatic scikit-learn output wrapping and global output settings are
         bypassed to preserve native names and permitted extra columns.
+        Output choices survive cloning. None leaves the current choice intact;
+        "default" resets input-kind preservation. Fit always returns self and
+        does not collect lazy rows. Forcing lazy output from eager input may
+        wrap an already evaluated result; use lazy input to defer evaluation.
         """
-        if transform not in (None, "default", "polars"):
-            raise ValueError("Only 'default' and 'polars' output are supported.")
+        if transform not in (None, "default", "polars", "polars-lazy"):
+            raise ValueError(
+                "Only 'default', 'polars', and 'polars-lazy' output are supported."
+            )
+        if transform is not None:
+            self._sklearn_output_config = {"transform": transform}
         return self

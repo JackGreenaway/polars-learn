@@ -1,72 +1,94 @@
 # polars-learn
 
-High-performance feature engineering for scikit-learn, powered by Polars.
+Prepare Polars data for scikit-learn with reusable feature expressions, column
+selection, and schema validation. Work with eager `DataFrame` inputs or keep
+`LazyFrame` queries deferred until you need their results.
 
-## Features
-
-- Composable native Polars expressions, evaluated in dependency order.
-- Declarative schema contracts and column selection for reusable data preparation.
-- Learned schemas with strict, semi-strict, and permissive validation.
-- scikit-learn estimators with cloning, parameters, and feature names.
-- Native Polars output and optional, explicit pandas conversion.
-- Python 3.11+, Polars 1.20+, and scikit-learn 1.6+.
+Requires Python 3.11+, Polars 1.20+, and scikit-learn 1.6+.
 
 ## Installation
 
+Install the package into your project:
+
 ```bash
 uv add polars-learn
-# From a local checkout:
-uv pip install .
-# Optional pandas and PyArrow support:
-uv pip install '.[pandas]'
+# Or use pip:
+pip install polars-learn
 ```
+
+For optional pandas input support:
+
+```bash
+uv add 'polars-learn[pandas]'
+# Or use pip:
+pip install 'polars-learn[pandas]'
+```
+
+See [Development](#development) for running this repository from a checkout.
+
+## Choose a Class
+
+| Class | Use it when | What fitting does |
+| --- | --- | --- |
+| `SchemaSpec` | You already know the required column names and dtypes. | Checks your explicit contract and records output names. |
+| `SchemaValidator` | Training data should define the schema for later input. | Learns every training column's name, order, and dtype. |
+| `FeatureSpec` | You want to describe one feature operation. | This is a description, not a transformer; there is no `fit`. |
+| `FeatureEngineer` | You want to execute feature operations in order. | Validates the transformation and records input/output schemas. |
+| `ColumnSelector` | You want to keep, reorder, or rename selected columns. | Checks selected columns and records their output names. |
+| `FeaturePassthrough` | You want an explicit unchanged-column pipeline step or branch. | Checks selected columns and records their unchanged names. |
+
+The five transformers share `fit`, `transform`, `fit_transform`,
+`get_feature_names_out`, `get_params`, `set_params`, and `set_output`.
+All six classes accept `verbosity`. See the [API reference](docs/api.md)
+for every constructor option, fitted attribute, and public method.
 
 ## Quick Start
 
 ```python
 import polars as pl
-from polars_learn import (
-    ColumnSelector,
-    FeatureEngineer,
-    FeatureSpec,
-    SchemaSpec,
-    SchemaValidator,
-)
+
+from polars_learn import FeatureEngineer, FeatureSpec, SchemaValidator
 
 X = pl.DataFrame({"price": [10.0, 20.0, 30.0], "quantity": [2, 3, 4]})
 
-schema = SchemaSpec({"price": pl.Float64, "quantity": pl.Int64})
-validated = schema.fit_transform(X)
-
-selector = ColumnSelector(["quantity", "price"], rename={"quantity": "qty"})
-selected = selector.fit_transform(validated)
-print(selected.columns)
-# ['qty', 'price']
-
-validator = SchemaValidator(mode="strict").fit(X)
+validator = SchemaValidator().fit(X)
 validated = validator.transform(X)
 
 engineer = FeatureEngineer(
     [
         FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional"),
         FeatureSpec(
-            pl.col("notional").log1p(),
-            alias="log_notional",
-            drop=["quantity"],
+            pl.col("notional").log1p(), alias="log_notional", drop=["quantity"]
         ),
     ]
 )
 result = engineer.fit_transform(validated)
-print(result)
-print(engineer.get_feature_names_out())
-# ['price' 'notional' 'log_notional']
+
+assert isinstance(result, pl.DataFrame)
+assert result.columns == ["price", "notional", "log_notional"]
+assert result["notional"].to_list() == [20.0, 60.0, 120.0]
+print(engineer.get_feature_names_out().tolist())
+# ['price', 'notional', 'log_notional']
 ```
+
+`fit(X)` returns the transformer. `transform(X)` applies a fitted transformer.
+`fit_transform(X)` fits and then transforms the same input. Calling `transform`
+or `get_feature_names_out` before a successful fit raises scikit-learn's
+`NotFittedError`. The input frame is never mutated.
 
 ## Feature Engineering
 
-`FeatureSpec` accepts exactly one of `expression` (one `pl.Expr`) or `expressions` (a nonempty sequence of expressions). It stores a single canonical expression tuple. Names follow Polars conventions: an existing alias or a native output name needs no additional alias. An explicit `alias` overrides the name of one output; it is rejected for multiple outputs. Selectors and expression expansion are supported, with their output names resolved against the frame.
+Create a `FeatureSpec` with exactly one of `expression` (a single `pl.Expr`) or
+`expressions` (a nonempty sequence). Use native expression names, an expression's
+`.alias(...)`, or the specification's `alias` argument to name its outputs.
+An explicit `alias` requires exactly one expression with one output.
 
 ```python
+import polars as pl
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+quotes = pl.DataFrame({"ask": [11.0], "bid": [9.0]})
 spec = FeatureSpec(
     expressions=[
         (pl.col("ask") - pl.col("bid")).alias("spread"),
@@ -75,125 +97,462 @@ spec = FeatureSpec(
     drop=["ask", "bid"],
     name="quote_features",
 )
-quotes = pl.DataFrame({"ask": [11.0], "bid": [9.0]})
-print(FeatureEngineer([spec]).fit_transform(quotes))
+result = FeatureEngineer(spec).fit_transform(quotes)
+assert result.to_dict(as_series=False) == {"spread": [2.0], "mid": [10.0]}
 ```
 
-Expressions within one specification are evaluated together and cannot reference new columns created by siblings. Separate specifications execute sequentially; later ones can use earlier outputs. Drops happen after each specification. Missing expression inputs, missing drop columns, and duplicate output names raise `FeatureEngineeringError` (duplicate names detectable at construction raise `ValueError`). Overwriting existing columns is allowed and keeps Polars' column position. For example, `FeatureSpec(pl.col("price") + 1)` replaces `price`.
-
-`fit` executes the training transformation to validate expressions and learn output names and dtypes. `transform` requires the fitted input column names and order and the exact fitted output schema. Input dtype differences are acceptable only when the resulting schema remains identical; use `SchemaValidator` first for explicit input type policies. Empty feature lists are identity transforms. The public API accepts eager DataFrames; internally, lazy stages preserve sequential semantics and collect once per execution. Expressions are stateless; training transformations do not learn statistics. Use deterministic expressions to keep training and inference consistent.
-
-## Schema Contracts and Column Selection
-
-`SchemaSpec` is a lightweight, declarative contract for required columns and dtypes. It validates DataFrames without needing a fitted estimator state and is useful when you want a reusable schema assertion in training or validation code.
+`FeatureEngineer` accepts a single `FeatureSpec` directly, as in the example
+above, a dict of `FeatureSpec` keyword arguments, or an ordered sequence mixing
+those forms. Dicts are unpacked with `FeatureSpec(**config)` and undergo the same
+validation. For example:
 
 ```python
-schema = SchemaSpec({"price": pl.Float64, "quantity": pl.Int64})
-print(schema.fit_transform(X).schema)
+import polars as pl
+
+from polars_learn import FeatureEngineer
+
+X = pl.DataFrame({"price": [10.0, 20.0]})
+engineer = FeatureEngineer({"expression": pl.col("price") * 2, "alias": "doubled"})
+assert engineer.fit_transform(X)["doubled"].to_list() == [20.0, 40.0]
 ```
 
-`ColumnSelector` keeps or reorders a chosen subset of columns, optionally renaming them to a final output schema. It suits preprocessing steps such as separating feature blocks, keeping a fixed input order for downstream estimators, or producing a tidy column set before feature engineering.
+A dict uses the exact keys `expression`, `expressions`, `alias`, `drop`, `name`,
+and `verbosity` accepted by `FeatureSpec`, with exactly one of `expression` or
+`expressions`. Expressions must be actual Polars expression objects; expression
+strings are not evaluated. Unknown keys and invalid values fail at construction,
+with the configuration's sequence index included when applicable. An empty dict
+is invalid; use `FeatureEngineer([])` for an identity operation.
+
+Single definitions are treated as one-element sequences internally; constructor
+parameters, including original dicts, are retained unchanged for scikit-learn
+cloning and `get_params`.
+The same forms are accepted by `set_params(features=...)`; refit after changes.
+
+Expressions within one specification run together. They can reference columns
+already present, but cannot reference columns newly created by another expression
+in that same specification. Use separate specifications for dependent features.
+Specifications run in list order; drops occur after each specification's
+expressions. Later specifications cannot use dropped columns.
+
+Existing columns can be overwritten: `FeatureSpec(pl.col("price") + 1)` replaces
+`price`. Selectors such as `pl.all().name.suffix("_copy")` can expand to multiple
+outputs. Duplicate output names and missing expression or drop inputs fail during
+schema checking; duplicates detectable when constructing a specification fail
+there. An empty `FeatureEngineer([])` leaves the columns unchanged.
+
+`FeatureEngineer.transform` requires the fitted input names in exactly the same
+order, and the resulting output names, order, and dtypes must match the fitted
+output schema. Input dtypes may differ if the final output schema still matches.
+Use a `SchemaValidator` first when input types need a defined conversion policy.
+
+Fitting eager input evaluates the feature expressions. Fitting lazy input checks
+the plan's schema without evaluating rows. Features do not learn statistics;
+use deterministic expressions. Currently `fit_transform` calls both `fit` and
+`transform`, so eager feature expressions are evaluated twice.
+
+## Fixed Contracts and Column Selection
+
+`SchemaSpec` checks an explicit, nonempty schema. Required columns must have
+exactly the specified dtypes; this class does not cast them. Both its `fit` and
+`transform` validate input, and `transform` requires a successful fit.
+
+`ColumnSelector` returns just the columns you choose, in the requested order.
+Unselected columns are ignored, input order may differ, and dtypes are not
+validated. Selected and renamed output names must be unique.
 
 ```python
+import polars as pl
+
+from polars_learn import ColumnSelector, SchemaSpec
+
+X = pl.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
+contract = SchemaSpec({"price": pl.Float64, "quantity": pl.Int64})
+validated = contract.fit_transform(X)
+
 selector = ColumnSelector(["quantity", "price"], rename={"quantity": "qty"})
-print(selector.fit_transform(X).columns)
-# ['qty', 'price']
+selected = selector.fit_transform(validated)
+assert selected.columns == ["qty", "price"]
 ```
 
-## Schema Validation
+For `SchemaSpec`, extra columns are rejected by default. If extras are allowed,
+`extra_columns="drop"` produces only the required columns; `"preserve"` puts
+required columns first and then extras in their input order. Preserved extra
+column names become part of the fitted output names. Later transforms must
+produce those same names in the same order; their dtypes are not checked.
+Use `SchemaValidator` if inference may introduce new extra columns.
+
+## Explicit Feature Passthrough
+
+Use `FeaturePassthrough(columns)` when a pipeline layer should simply carry
+named columns forward. It returns just those columns in the specified order,
+with their Polars values, names, dtypes, nulls, and row order preserved. There
+is no renaming or casting option. Selected columns must exist; input order and
+dtypes may differ between calls. It supports the same verbosity, pandas
+conversion, fitted feature names, and output controls as the other transformers.
 
 ```python
-validator = SchemaValidator(
-    mode="semi-strict",
-    allow_extra_columns=False,
-    enforce_column_order=True,
-)
-validator.fit(X)  # Always learns the raw input schema
-print(validator.schema_)
-validated = validator.transform(X)  # Always validates against that schema
+import polars as pl
+from sklearn.pipeline import Pipeline
+
+from polars_learn import FeaturePassthrough
+
+X = pl.DataFrame({"id": [7, 8], "flag": [True, False], "unused": [1, 2]})
+pipeline = Pipeline([("unchanged", FeaturePassthrough(["id", "flag"]))])
+result = pipeline.fit_transform(X.lazy())
+assert isinstance(result, pl.LazyFrame)
+assert result.collect().equals(X.select("id", "flag"))
 ```
 
-| Mode               | Policy for differing dtypes                             |
-| ------------------ | ------------------------------------------------------- |
-| `strict` (default) | Reject every dtype difference.                          |
-| `semi-strict`      | Allow only the explicit lossless widening policy below. |
-| `permissive`       | Use Polars `cast(strict=True)` and report failures.     |
+A sequential `Pipeline` passes each step's output to the next step, so a
+passthrough step selecting two columns omits all the others. To keep unchanged
+columns **alongside** transformed columns, put the operations in parallel
+`ColumnTransformer` branches:
 
-Semi-strict allows integer widening when the entire source dtype's range fits inside the target integer dtype (including compatible unsigned-to-signed widening), Float32 → Float64, and integer → Float64 only when **every non-null value round-trips exactly**. For example, Int64 `2**53` and `2**54` are accepted, but `2**53 + 1` is rejected. It rejects narrowing, strings to numbers, and Null dtype to a different dtype. Null values in already compatible columns are preserved; nullability constraints are not part of this version.
+```python
+import polars as pl
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler
 
-Permissive casts may be lossy according to Polars semantics, such as floats to integers. Failed casts never silently replace invalid values with nulls. Missing required columns always fail; multiple schema mismatches are reported in `SchemaValidationError`. Strict mode does not cast or rename columns.
+from polars_learn import FeaturePassthrough
 
-Extra columns fail by default. Set `allow_extra_columns=True` to preserve them, or also set `extra_columns="drop"` to explicitly remove them. Column order checks compare the relative order of required columns; permitted extras may appear anywhere. With `enforce_column_order=False`, output is normalised to fitted column order, followed by preserved extras in their input order. `get_feature_names_out()` describes fitted required columns; inference-only extras are not included. Avoid preserving inference-only extras before a fixed-width downstream estimator or `FeatureEngineer`.
+X = pl.DataFrame({"value": [10.0, 20.0], "id": [7, 8], "flag": [True, False]})
+preprocessing = ColumnTransformer(
+    [
+        ("scaled", StandardScaler(), ["value"]),
+        ("unchanged", FeaturePassthrough(["id", "flag"]), ["id", "flag"]),
+    ],
+    verbose_feature_names_out=False,
+).set_output(transform="polars")
+result = preprocessing.fit_transform(X)
+assert result["value"].to_list() == [-1.0, 1.0]
+assert result.select("id", "flag").equals(X.select("id", "flag"))
+assert result.columns == ["value", "id", "flag"]
+```
 
-The shorthand `strict=True` means strict mode, and `strict=False` means permissive mode. Conflicting `strict` and `mode` arguments are rejected. Schemas learned by the validator and feature engineer are independent.
+The outer column lists tell `ColumnTransformer` which input to send to each
+branch; `FeaturePassthrough` declares its own selected-column contract. Use eager
+input at this boundary (`lazy_X.collect()` for a lazy query). Polars output keeps
+the separate column dtypes. `verbose_feature_names_out=False` prevents branch
+prefixes on output names; final names must then be unique. For branch behavior,
+see the [scikit-learn ColumnTransformer reference](https://scikit-learn.org/stable/modules/generated/sklearn.compose.ColumnTransformer.html).
+Use `ColumnSelector` when you also need optional renaming.
+
+## Learned Schema Validation
+
+`SchemaValidator.fit` learns all training columns as required columns. Transform
+checks them against the learned dtypes according to `mode`:
+
+| Mode | Treatment of a different input dtype |
+| --- | --- |
+| `"strict"` (default) | Reject it; no casting. |
+| `"semi-strict"` | Allow only the lossless widening policy below. |
+| `"permissive"` | Attempt a Polars cast with `strict=True`; some successful casts may lose precision. |
+
+Semi-strict permits integer widening when the **entire source dtype's range**
+fits inside the fitted integer dtype's range, including compatible unsigned to
+signed widening. Small observed values alone do not make narrowing acceptable.
+It also permits Float32 to Float64, and integer to Float64 only when every
+non-null value round-trips exactly. For example, `2**53` and `2**54` are accepted,
+but `2**53 + 1` is rejected. String to numeric conversion, narrowing, and Null
+dtype to another dtype are rejected in this mode.
+
+```python
+import polars as pl
+
+from polars_learn import SchemaValidator
+
+train = pl.DataFrame({"x": pl.Series([1], dtype=pl.Int64)})
+incoming = pl.DataFrame({"x": pl.Series([2, None], dtype=pl.Int32)})
+validator = SchemaValidator(mode="semi-strict").fit(train)
+result = validator.transform(incoming)
+assert result.schema["x"] == pl.Int64
+assert result["x"].to_list() == [2, None]
+```
+
+Required columns must always be present. Extra columns fail unless
+`allow_extra_columns=True`; allowing extras does not make fitted columns
+optional. `extra_columns="drop"` removes allowed extras, while the default
+`"preserve"` keeps them. The drop setting alone does not allow extras.
+
+`enforce_column_order=True` checks the relative order of required columns, so
+allowed extras can appear between them. With `enforce_column_order=False`, output
+puts fitted columns first, followed by preserved extras in their input order.
+`get_feature_names_out()` lists required fitted columns, excluding inference-only
+extras. Preserving extras can change the output width; drop them before an
+estimator that expects a fixed number of features.
+
+Null values are preserved when the dtype is compatible. Nullability constraints
+are not learned. In permissive mode, a column with Null dtype can be cast to the
+fitted dtype. Failed strict casts raise; they do not silently replace invalid
+values with nulls. Choose the validation policy through `mode`: `"strict"`,
+`"semi-strict"`, or `"permissive"`. The default is `"strict"`.
+
+## LazyFrames and Return Types
+
+All five transformers accept a `pl.LazyFrame`, including a query from
+`pl.scan_csv(...)`. Default output follows the input to **each call**, independently
+of whether fitting used eager or lazy input. Pandas input, when conversion is
+allowed, is treated as an eager DataFrame.
+
+| `set_output(transform=...)` | DataFrame input | LazyFrame input |
+| --- | --- | --- |
+| `"default"` (initial behavior) | DataFrame | LazyFrame |
+| `"polars"` | DataFrame | DataFrame; collects the result |
+| `"polars-lazy"` | LazyFrame | LazyFrame |
+| `None` | Keep the existing choice | Keep the existing choice |
+
+```python
+import polars as pl
+
+from polars_learn import FeatureEngineer, FeatureSpec
+
+X = pl.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
+engineer = FeatureEngineer(
+    [FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")]
+)
+plan = engineer.fit_transform(X.lazy())  # Build a plan; do not evaluate rows
+assert isinstance(plan, pl.LazyFrame)
+result = plan.collect()  # Execute when ready
+assert result["notional"].to_list() == [20.0, 60.0]
+
+engineer.set_output(transform="polars")
+eager_result = engineer.transform(X.lazy())  # Collect inside transform
+assert isinstance(eager_result, pl.DataFrame)
+
+engineer.set_output(transform="polars-lazy")
+lazy_result = engineer.transform(X)
+assert isinstance(lazy_result, pl.LazyFrame)
+engineer.set_output(transform="default")
+```
+
+Output settings control `transform` and `fit_transform` returns. `fit` always
+returns the transformer and does not collect lazy rows just because eager output
+is configured. Forcing a lazy return from eager input can wrap an already computed
+result; pass lazy input to keep row evaluation deferred throughout.
+
+Lazy operations check column names, order, dtypes, expression dependencies, and
+drops using schema metadata. Resolving metadata can access a source's metadata;
+it does not collect all its rows. Lazy fit validates the plan schema, not every
+input value. Value-dependent errors surface at collection. A returned LazyFrame
+is a query plan: collecting it again may execute the query again.
+
+Inspect lazy output with `plan.collect_schema()` for names and dtypes, and
+`plan.collect()` for data. Verbosity reports lazy row counts as unknown rather
+than evaluating rows to count them.
 
 ## scikit-learn Pipelines
 
+A pipeline built from these transformers can remain lazy. Set the last native
+transformer to eager output before a downstream estimator that needs
+materialized data. `"polars-lazy"` is a package-specific output option; do not
+pass it to scikit-learn's standard transformers.
+
 ```python
 import numpy as np
+import polars as pl
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from polars_learn import FeatureEngineer, FeatureSpec, SchemaValidator
+
+X = pl.DataFrame({"price": [10.0, 20.0, 30.0], "quantity": [2, 3, 4]})
+y = np.array([1.0, 2.0, 3.0])
 pipeline = Pipeline(
     [
         ("schema", SchemaValidator(mode="semi-strict")),
-        ("features", engineer),
+        (
+            "features",
+            FeatureEngineer(
+                [FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")]
+            ).set_output(transform="polars"),
+        ),
         ("scale", StandardScaler().set_output(transform="polars")),
         ("model", RandomForestRegressor(n_estimators=20, random_state=0)),
     ]
 )
-pipeline.fit(X, np.array([1.0, 2.0, 3.0]))
-print(pipeline.predict(X))
-print(pipeline[:-1].get_feature_names_out())
+pipeline.fit(X.lazy(), y)
+predictions = pipeline.predict(X.lazy())
+assert predictions.shape == (3,)
 ```
 
-These transformers implement `fit`, `transform`, `fit_transform`, `get_params`, `set_params`, and `get_feature_names_out`. Fitted attributes include `feature_names_in_`, `n_features_in_`, and `output_features_`. Cloning discards fitted state. Supplied `input_features` must exactly match fitted input names.
+Supported input is Polars DataFrames and LazyFrames, plus explicitly enabled
+pandas DataFrames. NumPy arrays, Series, Python lists, and sparse arrays are not
+accepted. These transformers bypass scikit-learn's automatic output wrapping
+and global output-container settings; configure each native transformer with
+`set_output`. There is no automatic conversion to NumPy or pandas output.
 
-Data stays in Polars between our transformers. Both support `set_output(transform="default")` and `set_output(transform="polars")`, which return native Polars frames. They reject `"pandas"` output and deliberately bypass scikit-learn's automatic output wrapping, including global output settings, to preserve native names and allowed extras. No automatic NumPy conversion occurs. Downstream estimator support for Polars depends on the estimator and installed scikit-learn version; arbitrary string columns do not work with random forests.
+Cloning keeps constructor parameters and explicit output settings, and discards
+fitted state. `y` is accepted for estimator compatibility and ignored. Additional
+`fit_transform` keyword parameters, including `sample_weight`, are unsupported.
+Refit after changing parameters that affect the fitted contract; `set_params`
+does not reset fitted state. Invalid settings are rechecked when processing input.
 
-Tests run applicable scikit-learn constructor, parameter, and cloning checks. Generic checks requiring NumPy array input do not apply to this deliberately DataFrame-only API. No LazyFrame, sparse-array, or NumPy input is accepted.
+## Verbosity
+
+All six classes accept an integer `verbosity`:
+
+| Level | Output to standard output |
+| --- | --- |
+| `0` (default) | No progress diagnostics. |
+| `1` | Input dimensions and fit/transform progress; specification construction summaries. |
+| `2` | Level 1 plus schemas and feature operation details. |
+
+```python
+import polars as pl
+
+from polars_learn import SchemaValidator
+
+X = pl.DataFrame({"x": [1, 2]})
+validator = SchemaValidator(verbosity=1)
+validated = validator.fit_transform(X)
+# [SchemaValidator] Validating input
+# [SchemaValidator] Input: 2 rows, 1 columns
+# [SchemaValidator] Fit complete; output columns: ['x']
+# [SchemaValidator] Validating input
+# [SchemaValidator] Input: 2 rows, 1 columns
+# [SchemaValidator] Transform complete: 2 rows, 1 columns
+```
+
+`FeatureSpec` reports its construction separately. An engineer's verbosity does
+not change its specifications' verbosity. A dict config's `verbosity` applies when
+that config is converted into a specification, during construction and each
+fit/transform call. Frame summaries show metadata rather
+than printing data rows; feature details can include expression representations.
+Levels must be `0`, `1`, or `2`; booleans and strings are rejected.
+Verbosity does not suppress exceptions or pandas conversion warnings.
+
+## Errors and When They Occur
+
+| Situation | Exception or warning | Timing |
+| --- | --- | --- |
+| Invalid argument type or unsupported input | `TypeError` | Construction or the next relevant operation |
+| Invalid settings, conflicting policies, or duplicate configured names | `ValueError` | Construction or revalidation |
+| Transform or feature-name access before fitting | `sklearn.exceptions.NotFittedError` | Method call |
+| `SchemaSpec` contract or fitted output-name mismatch | `ValueError` | Fit/transform schema check |
+| `ColumnSelector`/`FeaturePassthrough` missing columns or fitted output-name mismatch | `ValueError` | Fit/transform schema check |
+| `SchemaValidator` missing columns, disallowed extras/order/types, or eager cast failure | `SchemaValidationError` | Transform |
+| Feature dependency, drop, or schema failure; eager feature execution failure | `FeatureEngineeringError` | Fit/transform |
+| Value-dependent feature failure or permissive cast failure in a returned lazy plan | Native Polars exception | `collect()` or another execution operation |
+| Lossy semi-strict integer to Float64 cast in a lazy plan | `SchemaValidationError` | Lazy execution |
+| Enabled pandas conversion with warnings enabled | `PandasConversionWarning` | Conversion, even at verbosity 0 |
+
+`PolarsLearnError` is the base of `SchemaValidationError` and
+`FeatureEngineeringError`. Plain `TypeError`/`ValueError`, `NotFittedError`, and
+native Polars errors do not inherit from it. Input query and source failures
+can also propagate as native Polars or source exceptions during schema resolution
+or collection. Wrapped errors preserve their original exception as `__cause__`.
+
+To force value evaluation within `transform`, request `"polars"` output.
+`FeatureEngineer` wraps resulting execution errors in `FeatureEngineeringError`;
+`SchemaValidator` wraps Polars collection errors in `SchemaValidationError`.
+`SchemaSpec`, `ColumnSelector`, and `FeaturePassthrough` do not wrap
+source/collection errors.
 
 ## Optional Pandas Support
 
-```bash
-uv sync --extra pandas
-```
+Install the `pandas` extra shown above, then explicitly allow conversion:
 
 ```python
-# Requires the pandas extra; both transformers expose these options.
 import pandas as pd
 
-pandas_X = pd.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
+from polars_learn import SchemaValidator
+
+X = pd.DataFrame({"price": [10.0, 20.0], "quantity": [2, 3]})
 validator = SchemaValidator(convert_pandas=True, warn_on_conversion=False)
-polars_X = validator.fit_transform(pandas_X)
+result = validator.fit_transform(X)
+assert result.columns == ["price", "quantity"]
 ```
 
-Pandas input is rejected unless `convert_pandas=True`. Conversion returns Polars and emits `PandasConversionWarning` about memory and performance overhead unless `warn_on_conversion=False`. Imports are lazy; core functionality works without pandas or PyArrow. The extra includes PyArrow because nullable, extension, and other non-NumPy-backed pandas dtypes can require it for `pl.from_pandas`. Conversion follows Polars conventions (including NaN-to-null and ignoring the pandas index). Unsupported conversion dtypes raise rather than falling back to row-wise operations.
+All five transformers expose `convert_pandas` and `warn_on_conversion`.
+Conversion is disabled by default. When enabled, it emits
+`PandasConversionWarning` unless `warn_on_conversion=False`. Use Polars directly
+to avoid conversion overhead; `fit_transform` may convert input more than once.
+Pandas and PyArrow are imported only when needed. The extra includes PyArrow for
+nullable, extension, and other dtypes that require it. Conversion follows
+Polars conventions, including NaN to null conversion and ignoring the pandas
+index. Unsupported dtypes raise; conversion does not fall back to row operations.
+An explicit `"polars-lazy"` output choice returns a lazy wrapper after conversion.
 
 ## Development
 
+Run from a repository checkout:
+
 ```bash
-uv sync
-uv sync --extra pandas     # Optional interoperability test coverage
-uv run pytest
+uv sync  # Includes pandas and PyArrow for the full test suite
+uv run pytest --doctest-modules src tests
 uv run ruff check .
+uv run ruff format .
 uv run ruff format --check .
 uv run pyright
 uv build
 ```
 
-`uv.lock` pins reproducible development dependencies. Pyright includes its Node runtime through the development extra, so no system Node installation is needed. Pandas tests use `pytest.importorskip("pandas")`; core tests also run without the optional extra. The package ships `py.typed` for downstream typing tools.
+**Ruff is the formatter for all Python code and documentation examples.**
+CI checks `ruff format --check .`, linting, types, tests, and API doctests.
+Ruff's directory checks cover Python files, not Markdown code fences; format a
+Markdown example with `ruff format --stdin-filename example.py` before adding it.
+The test matrix covers Python 3.11 and 3.12 with all development dependencies,
+including pandas and PyArrow. Every job runs the full interoperability suite.
+A subprocess test separately verifies native usage with pandas and PyArrow blocked.
 
-Library requirements use minimum versions without speculative upper bounds. Add an upper bound or exclude a release only when a known incompatibility requires it; the lockfile pins the development environment without constraining downstream applications.
+`uv.lock` pins development dependencies. Pyright includes its Node runtime via
+the development group. Pandas and PyArrow are required for development;
+missing pandas causes test collection to fail rather than silently skip coverage.
+Run `uv sync` after changing requirements. These remain optional runtime dependencies
+for users of the package. The package includes `py.typed`; transformer return annotations
+cover both DataFrame and LazyFrame because `set_output` can change the container.
+Narrow with `isinstance(result, pl.LazyFrame)` when your type checker needs the
+specific type. Library dependencies use minimum versions; the lockfile does not
+constrain downstream applications to those exact versions.
 
 ### Releases
 
-Configure the repository or `pypi` environment secret `PYPI_API_TOKEN` with a PyPI upload token for `polars-learn`. The publishing job uses the `pypi` environment.
+Run **Actions → Create GitHub Release → Run workflow** to release the version
+in `pyproject.toml` from the selected branch or tag. The workflow validates the
+package, builds a fresh wheel and source archive, and creates a GitHub release
+named `vX.Y.Z` with those files attached. Once that workflow succeeds,
+**Upload Python Package** starts automatically and publishes the **same built
+files** to PyPI. Existing files in a local `dist/` directory are not used.
 
-Update `project.version` in `pyproject.toml` and `__version__` in `src/polars_learn/__init__.py`, run `uv lock`, and push the changes. Publish a GitHub release from the GitHub Releases page to trigger **Upload Python Package**. It builds distributions, transfers them to a separate publishing job, and uploads them to PyPI.
+Before the first release:
 
-**Create GitHub Release** remains available to create a release with validated distributions. Releases created by that workflow with GitHub's workflow token do not trigger **Upload Python Package**; use the GitHub Releases page for the publishing flow.
+1. Push both [release](.github/workflows/create-release.yml) and
+   [publishing](.github/workflows/python-publish.yml) workflows to the repository's
+   default branch. The automatic publisher uses GitHub's `workflow_run` event,
+   which requires the publishing workflow on that branch.
+2. Create the GitHub Actions environment `pypi` if it does not already exist.
+3. Configure the `polars-learn` PyPI project's trusted publisher with your GitHub
+   repository owner/name, workflow filename **`python-publish.yml`**, and
+   environment **`pypi`**. See [PyPI's setup instructions](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
+   Publishing uses OIDC and does not read a `PYPI_API_TOKEN` secret.
+
+For each new version:
+
+1. Set `project.version` in `pyproject.toml` and `__version__` in
+   `src/polars_learn/__init__.py` to the same new `X.Y.Z` version, then run `uv lock`.
+2. Commit and push the release changes. The runner builds from the selected
+   committed revision, so uncommitted local changes are not included.
+3. Run **Create GitHub Release** from Actions, selecting the release branch or tag.
+4. Check both workflow runs. The second run uses the `pypi` environment; any
+   protection rules configured for that environment still apply.
+
+The release workflow fails on mismatched versions, an existing `vX.Y.Z` tag,
+failed tests/checks, or invalid build metadata. The automatic publisher only
+accepts successful manual release-workflow runs from this repository and downloads
+artifacts from that exact run. Failed or cancelled release runs do not publish.
+It works with `GITHUB_TOKEN` without relying on its release event to start another
+workflow. See [GitHub's workflow_run documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run).
+
+Publishing a GitHub release manually through the Releases page is also supported.
+Use a `vX.Y.Z` tag matching the code's package version. That path builds and
+validates the tagged source before uploading to PyPI.
+
+If PyPI publishing fails after the GitHub release was created, fix the reported
+setup or upload problem and rerun **Upload Python Package**, rather than creating
+the same release tag again. Its automatic path reuses the original release-run
+artifacts, which must still be available. PyPI versions cannot be overwritten;
+use a new version for changed distributions.
 
 ## License
 

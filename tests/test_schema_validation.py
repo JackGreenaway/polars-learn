@@ -18,7 +18,7 @@ def test_schema_inference_and_repeated_transform(frame):
         assert_frame_equal(est.transform(frame), frame)
     copied = clone(est)
     assert not hasattr(copied, "schema_")
-    assert copied.get_params()["mode"] is None
+    assert copied.get_params()["mode"] == "strict"
     assert_frame_equal(copied.fit_transform(frame), frame)
     with pytest.raises(ValueError):
         est.get_feature_names_out(["bad"])
@@ -134,19 +134,10 @@ def test_nulls_and_no_mutation():
     [
         {"mode": "bad"},
         {"extra_columns": "bad"},
-        {"strict": "bad"},
-        {"mode": "semi-strict", "strict": True},
+        {"mode": None},
+        {"mode": True},
     ],
 )
 def test_invalid_configuration(frame, kwargs):
     with pytest.raises((ValueError, TypeError)):
         SchemaValidator(**kwargs).fit(frame)
-
-
-def test_legacy_strict_alias(frame):
-    est = SchemaValidator(strict=True).fit(frame)
-    assert_frame_equal(est.transform(frame), frame)
-    est = SchemaValidator(strict=False).fit(frame)
-    assert_frame_equal(
-        est.transform(frame.with_columns(pl.col("price").cast(pl.String))), frame
-    )

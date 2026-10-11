@@ -2,22 +2,28 @@ import importlib
 import subprocess
 import sys
 
+import pandas as pd
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
 from polars_learn import (
     FeatureEngineer,
+    FeaturePassthrough,
     PandasConversionWarning,
     SchemaValidator,
 )
 
 
 @pytest.mark.parametrize(
-    "factory", [lambda **kw: FeatureEngineer([], **kw), SchemaValidator]
+    "factory",
+    [
+        lambda **kw: FeaturePassthrough(["price", "quantity"], **kw),
+        lambda **kw: FeatureEngineer([], **kw),
+        SchemaValidator,
+    ],
 )
 def test_conversion_options(frame, factory):
-    pd = pytest.importorskip("pandas")
     incoming = pd.DataFrame(frame.to_dict(as_series=False))
     with pytest.raises(TypeError, match="convert_pandas"):
         factory().fit(incoming)
@@ -31,7 +37,6 @@ def test_conversion_options(frame, factory):
 
 
 def test_nullable_pandas():
-    pd = pytest.importorskip("pandas")
     incoming = pd.DataFrame(
         {
             "i": pd.Series([1, None], dtype="Int64"),

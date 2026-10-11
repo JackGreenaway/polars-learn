@@ -8,13 +8,13 @@ from sklearn.utils.validation import (
     check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
 )
 
-from ._utils import NativeTransformer, to_polars
+from ._utils import NativeTransformer, frame_schema, to_polars
 from .exceptions import SchemaValidationError
-from .types import ExtraColumnPolicy, Schema, ValidationMode
+from .types import ExtraColumnPolicy, Frame, Schema, ValidationMode
 
 
 class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
-    """Describe a fixed input contract and validate DataFrames against it.
+    """Describe a fixed contract for Polars DataFrames and LazyFrames.
 
     Parameters
     ----------
@@ -23,14 +23,58 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
     allow_extra_columns : bool, default=False
         Whether additional, non-required columns are accepted.
     enforce_column_order : bool, default=True
-        Require the fitted required column order to match the input exactly.
+        Require the relative order of required columns to match schema key order.
     extra_columns : {"preserve", "drop"}, default="preserve"
         If extra columns are permitted, whether to keep or drop them in output.
     convert_pandas : bool, default=False
         Allow pandas DataFrames and convert them to Polars. Requires pandas;
         some dtypes also require PyArrow.
+    verbosity : {0, 1, 2}, default=0
+        Print progress at 1 and schema/operation details at 2; 0 is silent.
     warn_on_conversion : bool, default=True
         Emit ``PandasConversionWarning`` when converting pandas input.
+
+    Attributes
+    ----------
+    schema_ : dict of str to polars.DataType
+        Copy of the required explicit schema recorded by fit.
+    feature_names_in_ : ndarray of str, dtype=object
+        All training input column names in input order, including extras.
+    n_features_in_ : int
+        Number of all training input columns.
+    output_features_ : ndarray of str, dtype=object
+        Fitted output names, including preserved training extras.
+
+    Raises
+    ------
+    TypeError
+        If schema keys/values or common options have invalid types.
+    ValueError
+        If schema is empty or not a dict, or an option has an invalid value.
+
+    See Also
+    --------
+    SchemaValidator : Learn required dtypes and allow inference-only extra names.
+
+    Notes
+    -----
+    DataFrames return DataFrames and LazyFrames return unevaluated LazyFrames
+    by default. Use set_output to force an eager or lazy output container.
+    Required dtypes must match exactly; there is no casting. Required output
+    columns follow schema key order, then preserved extras follow input order.
+    Transform requires fitting and exact fitted output names/order, including
+    preserved extras. Extra dtypes are not validated.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> from polars_learn import SchemaSpec
+    >>> X = pl.DataFrame({"extra": [9], "x": [1]})
+    >>> contract = SchemaSpec(
+    ...     {"x": pl.Int64}, allow_extra_columns=True, extra_columns="drop"
+    ... )
+    >>> contract.fit_transform(X.lazy()).collect().columns
+    ['x']
     """
 
     def __init__(
@@ -42,70 +86,133 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
         extra_columns: ExtraColumnPolicy = "preserve",
         convert_pandas: bool = False,
         warn_on_conversion: bool = True,
+        verbosity: int = 0,
     ) -> None:
-        if not isinstance(schema, dict) or not schema:
-            raise ValueError(
-                "schema must be a nonempty dict of column names to dtypes."
-            )
-        if any(not isinstance(column, str) or not column for column in schema):
-            raise TypeError("schema keys must be nonempty strings.")
-        for dtype in schema.values():
-            valid = isinstance(dtype, pl.DataType) or (
-                isinstance(dtype, type) and issubclass(dtype, pl.DataType)
-            )
-            if not valid:
-                raise TypeError("schema values must be Polars dtypes.")
-        if extra_columns not in ("preserve", "drop"):
-            raise ValueError("extra_columns must be 'preserve' or 'drop'.")
         self.schema = schema
         self.allow_extra_columns = allow_extra_columns
         self.enforce_column_order = enforce_column_order
         self.extra_columns = extra_columns
         self.convert_pandas = convert_pandas
         self.warn_on_conversion = warn_on_conversion
+        self.verbosity = verbosity
+        self._validate_options()
+        self._validate_schema()
 
-    def _input(self, X: object) -> pl.DataFrame:
-        return to_polars(
+    def _validate_schema(self) -> None:
+        if not isinstance(self.schema, dict) or not self.schema:
+            raise ValueError(
+                "schema must be a nonempty dict of column names to dtypes."
+            )
+        if any(not isinstance(column, str) or not column for column in self.schema):
+            raise TypeError("schema keys must be nonempty strings.")
+        for dtype in self.schema.values():
+            valid = isinstance(dtype, pl.DataType) or (
+                isinstance(dtype, type) and issubclass(dtype, pl.DataType)
+            )
+            if not valid:
+                raise TypeError("schema values must be Polars dtypes.")
+        if self.extra_columns not in ("preserve", "drop"):
+            raise ValueError("extra_columns must be 'preserve' or 'drop'.")
+
+    def _input(self, X: object) -> Frame:
+        self._validate_options()
+        self._validate_schema()
+        self._report("Validating input")
+        frame = to_polars(
             X,
             convert_pandas=self.convert_pandas,
             warn_on_conversion=self.warn_on_conversion,
         )
+        self._report_frame(frame, stage="Input")
+        return frame
 
     def fit(self, X: object, y: object = None) -> Self:
+        """Validate the explicit contract and record fitted output names.
+
+        Parameters
+        ----------
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
+            Input with all required columns and exact required dtypes. Extra
+            columns and ordering follow the constructor's policies. Pandas
+            requires conversion enabled.
+        y : object, default=None
+            Ignored; accepted for scikit-learn compatibility.
+
+        Returns
+        -------
+        self : SchemaSpec
+            Fitted contract. The provided schema is checked, not inferred anew.
+
+        Raises
+        ------
+        TypeError
+            If input, option types, or schema keys/values are unsupported.
+        ValueError
+            If the schema or input contract is invalid.
+
+        Notes
+        -----
+        Lazy input is checked through schema metadata without collecting rows.
+        Fitted output names include preserved training extras. No casts occur.
+        """
         frame = self._input(X)
-        self._validate(frame)
+        input_schema = frame_schema(frame)
+        result = self._validate(frame)
         self.schema_ = dict(self.schema)
-        self.feature_names_in_ = np.asarray(frame.columns, dtype=object)
-        self.n_features_in_ = frame.width
-        self.output_features_ = np.asarray(list(self.schema_), dtype=object)
+        self.feature_names_in_ = np.asarray(list(input_schema), dtype=object)
+        self.n_features_in_ = len(input_schema)
+        self.output_features_ = np.asarray(list(frame_schema(result)), dtype=object)
+        self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(
-        self, X: object, y: object = None, **fit_params: object
-    ) -> pl.DataFrame:
+    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
+        """Fit and transform the same input using the configured return kind.
+
+        Parameters
+        ----------
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
+            Input accepted by fit and transform. Pandas requires conversion enabled.
+        y : object, default=None
+            Ignored; accepted for scikit-learn compatibility.
+        **fit_params : dict
+            Extra fit parameters are unsupported and raise TypeError.
+
+        Returns
+        -------
+        X_transformed : polars.DataFrame or polars.LazyFrame
+            Transformed input. Default preserves input kind; set_output can
+            force an eager DataFrame or LazyFrame. Converted pandas is eager.
+
+        See Also
+        --------
+        fit : Validate input and record fitted state.
+        transform : Apply the fitted transformation and output configuration.
+        """
         if fit_params:
             raise TypeError(
                 f"Additional fit parameters are unsupported: {sorted(fit_params)}."
             )
         return self.fit(X, y).transform(X)
 
-    def _validate(self, frame: pl.DataFrame) -> pl.DataFrame:
+    def _validate(self, frame: Frame) -> Frame:
+        self._validate_schema()
+        input_schema = frame_schema(frame)
         expected_names = list(self.schema)
-        missing = [column for column in expected_names if column not in frame.columns]
+        missing = [column for column in expected_names if column not in input_schema]
         if missing:
             raise ValueError(f"Missing required columns: {missing}.")
-        extras = [column for column in frame.columns if column not in self.schema]
+        extras = [column for column in input_schema if column not in self.schema]
         if extras and not self.allow_extra_columns:
             raise ValueError(f"Unexpected columns: {extras}.")
-        present = [column for column in frame.columns if column in self.schema]
+        present = [column for column in input_schema if column in self.schema]
         if self.enforce_column_order and present != expected_names:
             raise ValueError(
                 f"Column order differs. Expected {expected_names}, received {present}."
             )
         for column, expected_dtype in self.schema.items():
-            if column not in frame.columns:
+            if column not in input_schema:
                 continue
-            got = frame[column].dtype
+            got = input_schema[column]
             if got != expected_dtype:
                 raise ValueError(
                     f"Column {column!r} has dtype {got}, expected {expected_dtype}."
@@ -117,16 +224,47 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
             return frame.select(ordered)
         return frame.select(expected_names)
 
-    def transform(self, X: object) -> pl.DataFrame:
+    def transform(self, X: object) -> Frame:
+        """Check exact required dtypes and return the fitted output columns.
+
+        Parameters
+        ----------
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
+            Input satisfying the explicit required schema and configured
+            extra-column/order policies. Pandas requires conversion enabled.
+
+        Returns
+        -------
+        X_validated : polars.DataFrame or polars.LazyFrame
+            Required columns in schema order, then preserved extras in input
+            order. Default preserves input kind; set_output can force the kind.
+
+        Raises
+        ------
+        sklearn.exceptions.NotFittedError
+            If fit has not completed successfully.
+        TypeError
+            If input or parameter types are unsupported.
+        ValueError
+            If the contract fails, configuration is invalid, or resulting output
+            names/order differ from fitting, including preserved extra names.
+
+        Notes
+        -----
+        No casting occurs; extra dtypes are not checked. Lazy validation uses
+        metadata. Explicit eager output collects the result; source/collection
+        errors are not wrapped.
+        """
         check_is_fitted(self, "schema_")
         frame = self._input(X)
         result = self._validate(frame)
-        if list(result.columns) != self.output_features_.tolist():
+        if list(frame_schema(result)) != self.output_features_.tolist():
             raise ValueError(
                 "Output columns differ from the fitted schema. "
-                f"Expected {self.output_features_.tolist()}, received {result.columns}."
+                f"Expected {self.output_features_.tolist()}, "
+                f"received {list(frame_schema(result))}."
             )
-        return result
+        return self._finish(result)
 
 
 _INTEGER_RANGES: dict[pl.DataType | type[pl.DataType], tuple[int, int]] = {
@@ -141,9 +279,8 @@ _INTEGER_RANGES: dict[pl.DataType | type[pl.DataType], tuple[int, int]] = {
 }
 
 
-def _safe_widen(series: pl.Series, target: pl.DataType) -> bool:
-    """Return whether this series satisfies the lossless widening policy."""
-    source = series.dtype
+def _widening_policy(source: pl.DataType, target: pl.DataType) -> bool | None:
+    """Return a schema-only decision, or None if values must be checked."""
     if source in _INTEGER_RANGES and target in _INTEGER_RANGES:
         source_min, source_max = _INTEGER_RANGES[source]
         target_min, target_max = _INTEGER_RANGES[target]
@@ -151,24 +288,42 @@ def _safe_widen(series: pl.Series, target: pl.DataType) -> bool:
     if source == pl.Float32 and target == pl.Float64:
         return True
     if source in _INTEGER_RANGES and target == pl.Float64:
-        try:
-            restored = series.cast(pl.Float64).cast(source, strict=True)
-            return bool((series == restored).fill_null(True).all())
-        except pl.exceptions.PolarsError:
-            return False
+        return None
     return False
 
 
+def _safe_widen(series: pl.Series, target: pl.DataType) -> bool:
+    """Return whether this series satisfies the lossless widening policy."""
+    decision = _widening_policy(series.dtype, target)
+    if decision is not None:
+        return decision
+    try:
+        restored = series.cast(pl.Float64).cast(series.dtype, strict=True)
+        return bool((series == restored).fill_null(True).all())
+    except pl.exceptions.PolarsError:
+        return False
+
+
+def _lossless_float_cast(series: pl.Series) -> pl.Series:
+    """Check value-dependent widening at lazy execution time."""
+    if not _safe_widen(series, pl.Float64()):
+        raise SchemaValidationError(
+            f"Column {series.name!r} cannot be losslessly widened to Float64 "
+            "in semi-strict mode."
+        )
+    return series.cast(pl.Float64, strict=True)
+
+
 class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
-    """Learn an input schema and validate subsequent Polars DataFrames.
+    """Learn a schema and validate subsequent Polars DataFrames or LazyFrames.
 
     Parameters
     ----------
-    mode : {"strict", "semi-strict", "permissive"} or None, default=None
-        Validation policy. ``None`` resolves to strict mode unless ``strict``
-        is explicitly false. Strict mode requires identical dtypes. Semi-strict
+    mode : {"strict", "semi-strict", "permissive"}, default="strict"
+        Validation policy. Strict mode requires identical dtypes. Semi-strict
         allows only the documented lossless widening policy. Permissive mode
-        attempts strict Polars casts, which may be lossy but raise on failure.
+        attempts Polars casts with strict=True. Successful casts can be lossy;
+        failure occurs immediately for eager input or at lazy execution.
     allow_extra_columns : bool, default=False
         Allow columns not present during fitting. Missing required columns
         always raise, regardless of the validation mode.
@@ -181,11 +336,10 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
     convert_pandas : bool, default=False
         Allow pandas DataFrames and convert them to Polars. Requires pandas;
         some dtypes also require PyArrow.
+    verbosity : {0, 1, 2}, default=0
+        Print progress at 1 and schema/operation details at 2; 0 is silent.
     warn_on_conversion : bool, default=True
         Emit ``PandasConversionWarning`` when converting pandas input.
-    strict : bool or None, default=None
-        Shorthand for strict mode when true or permissive mode when false.
-        Conflicting explicit ``mode`` and ``strict`` values raise ``ValueError``.
 
     Attributes
     ----------
@@ -197,6 +351,13 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
         Required input names in training order.
     output_features_ : ndarray of shape (n_features_in_,), dtype=object
         Fitted required names. Inference-only extras are not included.
+
+    Raises
+    ------
+    TypeError
+        If common options have invalid types.
+    ValueError
+        If mode, extra_columns, or verbosity is invalid.
 
     See Also
     --------
@@ -211,6 +372,13 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
     in compatible columns are preserved; nullability constraints are not learned.
     Fit always learns a fresh schema; transform always validates against it.
     Input data and schemas owned by other transformers are never mutated.
+    Lazy inputs are validated using metadata without collecting rows. Cast
+    failures and value-dependent integer-to-float checks run at collection.
+    Explicit eager output wraps Polars cast errors in SchemaValidationError;
+    collecting a returned LazyFrame can raise native Polars exceptions.
+    Default output preserves input kind. set_output can force "polars" (eager)
+    or "polars-lazy" output. With enforced order and preserved extras, output
+    keeps input order; disabling order enforcement puts required columns first.
 
     Examples
     --------
@@ -225,14 +393,14 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
 
     def __init__(
         self,
-        mode: ValidationMode | None = None,
+        mode: ValidationMode = "strict",
         *,
         allow_extra_columns: bool = False,
         enforce_column_order: bool = True,
         extra_columns: ExtraColumnPolicy = "preserve",
         convert_pandas: bool = False,
         warn_on_conversion: bool = True,
-        strict: bool | None = None,
+        verbosity: int = 0,
     ) -> None:
         self.mode = mode
         self.allow_extra_columns = allow_extra_columns
@@ -240,35 +408,37 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
         self.extra_columns = extra_columns
         self.convert_pandas = convert_pandas
         self.warn_on_conversion = warn_on_conversion
-        self.strict = strict
+        self.verbosity = verbosity
+        self._validate_options()
+        self._mode()
 
     def _mode(self) -> ValidationMode:
-        if self.mode not in (None, "strict", "semi-strict", "permissive"):
+        if self.mode not in ("strict", "semi-strict", "permissive"):
             raise ValueError("mode must be 'strict', 'semi-strict', or 'permissive'.")
-        if self.strict is not None and not isinstance(self.strict, bool):
-            raise TypeError("strict must be a bool or None.")
-        legacy = "strict" if self.strict is not False else "permissive"
-        if self.strict is not None and self.mode is not None and self.mode != legacy:
-            raise ValueError("strict and mode specify conflicting validation modes.")
         if self.extra_columns not in ("preserve", "drop"):
             raise ValueError("extra_columns must be 'preserve' or 'drop'.")
-        return self.mode or legacy
+        return self.mode
 
-    def _input(self, X: object) -> pl.DataFrame:
-        return to_polars(
+    def _input(self, X: object) -> Frame:
+        self._validate_options()
+        self._report("Validating input")
+        frame = to_polars(
             X,
             convert_pandas=self.convert_pandas,
             warn_on_conversion=self.warn_on_conversion,
         )
+        self._report_frame(frame, stage="Input")
+        return frame
 
     def fit(self, X: object, y: object = None) -> Self:
         """Learn column names, order, and dtypes without changing the input.
 
         Parameters
         ----------
-        X : polars.DataFrame or pandas.DataFrame of shape (n_samples, n_features)
-            Training data whose schema becomes the required schema. Pandas
-            input requires ``convert_pandas=True``.
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
+            Training data whose schema becomes the required schema. All input
+            columns become required. Pandas requires ``convert_pandas=True``.
+            Lazy input uses metadata without evaluating rows.
         y : object, default=None
             Ignored. Present for scikit-learn estimator compatibility.
 
@@ -282,25 +452,26 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
         TypeError
             If the input type is unsupported or pandas conversion is disabled.
         ValueError
-            If validation configuration is invalid or conflicting.
+            If validation configuration is invalid.
         """
         self._mode()
         frame = self._input(X)
-        self.schema_: Schema = dict(frame.schema)
-        self.feature_names_in_ = np.asarray(frame.columns, dtype=object)
-        self.n_features_in_ = frame.width
+        input_schema = frame_schema(frame)
+        self.schema_: Schema = input_schema
+        self.feature_names_in_ = np.asarray(list(input_schema), dtype=object)
+        self.n_features_in_ = len(input_schema)
         self.output_features_ = self.feature_names_in_.copy()
+        self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(
-        self, X: object, y: object = None, **fit_params: object
-    ) -> pl.DataFrame:
+    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
         """Fit to training data and return its transformed representation.
 
         Parameters
         ----------
-        X : polars.DataFrame or pandas.DataFrame of shape (n_samples, n_features)
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Training data. Pandas input requires ``convert_pandas=True``.
+            Lazy input is checked through metadata without evaluating rows.
         y : object, default=None
             Ignored. Present for scikit-learn estimator compatibility.
         **fit_params : dict
@@ -309,8 +480,9 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame of shape (n_samples, n_features_out)
-            Result of fitting this transformer and transforming the same data.
+        X_transformed : polars.DataFrame or polars.LazyFrame
+            Result of fitting and transforming the same input. Default preserves
+            input kind; set_output can force an eager or lazy container.
 
         See Also
         --------
@@ -323,68 +495,108 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
             )
         return self.fit(X, y).transform(X)
 
-    def transform(self, X: object) -> pl.DataFrame:
+    def _collect(self, result: pl.LazyFrame) -> pl.DataFrame:
+        try:
+            return result.collect()
+        except pl.exceptions.PolarsError as exc:
+            raise SchemaValidationError(
+                f"Lazy schema validation failed: {exc}"
+            ) from exc
+
+    def transform(self, X: object) -> Frame:
         """Validate the learned schema and normalise permitted differences.
 
         Parameters
         ----------
-        X : polars.DataFrame or pandas.DataFrame of shape (n_samples, n_columns)
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Input containing all fitted required columns. Additional columns
             must be explicitly permitted. Pandas requires conversion enabled.
 
         Returns
         -------
-        X_validated : polars.DataFrame of shape (n_samples, n_output_columns)
+        X_validated : polars.DataFrame or polars.LazyFrame
             Validated input with any configured casts, ordering, and extra
-            column policy applied. The original input is never mutated.
+            column policy applied. Default preserves input kind; set_output can
+            force the return container. The original input is never mutated.
 
         Raises
         ------
         sklearn.exceptions.NotFittedError
             If ``fit`` has not completed successfully.
         TypeError
-            If the input is unsupported or pandas conversion is disabled.
+            If input or options are unsupported, or pandas conversion is disabled.
+        ValueError
+            If validation configuration is invalid.
         SchemaValidationError
             If required columns are missing, extras or order are disallowed,
             dtypes are incompatible, or a cast fails. Multiple mismatches are
-            reported together, with cast exceptions preserved as the cause.
+            reported together, with eager cast exceptions preserved as the cause.
+
+        Notes
+        -----
+        Lazy schema and policy failures occur during this method. Permissive
+        cast failures occur at lazy execution and can be native Polars errors.
+        Lossless integer-to-float checks run at execution and raise
+        SchemaValidationError on failure. Explicit eager output wraps Polars
+        collection errors in SchemaValidationError with their causes.
         """
         check_is_fitted(self, "schema_")
         mode = self._mode()
         frame = self._input(X)
+        input_schema = frame_schema(frame)
         expected_names = list(self.schema_)
-        missing = [col for col in expected_names if col not in frame.columns]
-        extras = [col for col in frame.columns if col not in self.schema_]
+        missing = [col for col in expected_names if col not in input_schema]
+        extras = [col for col in input_schema if col not in self.schema_]
         issues: list[str] = []
         if missing:
             issues.append(f"Missing required columns: {missing}.")
         if extras and not self.allow_extra_columns:
             issues.append(f"Unexpected columns: {extras}.")
-        present = [col for col in frame.columns if col in self.schema_]
+        present = [col for col in input_schema if col in self.schema_]
         if self.enforce_column_order and not missing and present != expected_names:
             issues.append(
                 f"Column order differs. Expected {expected_names}, received {present}."
             )
-        conversions: list[pl.Series] = []
+        conversions: list[pl.Expr | pl.Series] = []
         cause: Exception | None = None
         for column, target in self.schema_.items():
             if column in missing:
                 continue
-            series = frame[column]
-            source = series.dtype
+            source = input_schema[column]
             if source == target:
                 continue
             detail = (
                 f"Column {column!r} has an incompatible type. "
                 f"Expected: {target}; Received: {source}; Validation mode: {mode}."
             )
-            if mode == "strict" or (
-                mode == "semi-strict" and not _safe_widen(series, target)
-            ):
+            widening_allowed = True
+            if mode == "semi-strict":
+                widening_allowed = (
+                    _safe_widen(frame[column], target)
+                    if isinstance(frame, pl.DataFrame)
+                    else _widening_policy(source, target) is not False
+                )
+            if mode == "strict" or not widening_allowed:
                 issues.append(detail)
                 continue
             try:
-                conversions.append(series.cast(target, strict=True))
+                if isinstance(frame, pl.DataFrame):
+                    # Cast once and preserve eager validation exception context.
+                    conversions.append(frame[column].cast(target, strict=True))
+                    continue
+                expression = pl.col(column).cast(target, strict=True)
+                if (
+                    isinstance(frame, pl.LazyFrame)
+                    and mode == "semi-strict"
+                    and source in _INTEGER_RANGES
+                    and target == pl.Float64
+                ):
+                    expression = pl.col(column).map_batches(
+                        _lossless_float_cast,
+                        return_dtype=pl.Float64,
+                        is_elementwise=True,
+                    )
+                conversions.append(expression)
             except pl.exceptions.PolarsError as exc:
                 cause = exc
                 issues.append(f"{detail} Cast failed: {exc}")
@@ -396,4 +608,4 @@ class SchemaValidator(NativeTransformer, auto_wrap_output_keys=None):
             if self.extra_columns == "preserve":
                 columns = columns + extras
             result = result.select(columns)
-        return result
+        return self._finish(result)

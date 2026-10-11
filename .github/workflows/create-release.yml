@@ -21,17 +21,17 @@ jobs:
       - name: Install Python
         run: uv python install 3.11
       - name: Install locked dependencies
-        run: uv sync --locked --extra pandas --python 3.11
+        run: uv sync --locked --python 3.11
       - name: Validate package
         run: |
-          uv run --locked --extra pandas pytest --doctest-modules src tests
-          uv run --locked --extra pandas ruff check .
-          uv run --locked --extra pandas ruff format --check .
-          uv run --locked --extra pandas pyright
+          uv run --locked pytest --doctest-modules src tests
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked pyright
       - name: Read package version
         id: version
         run: |
-          uv run --locked --extra pandas python - <<'PY'
+          uv run --locked python - <<'PY'
           import os
           import re
           import tomllib
@@ -54,7 +54,7 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" > /tmp/release-refs.json
-          uv run --locked --extra pandas python - <<'PY'
+          uv run --locked python - <<'PY'
           import json
           import tomllib
 
@@ -67,23 +67,24 @@ jobs:
           PY
       - name: Build and validate wheel and source archive
         run: |
-          uv build
-          uvx twine check --strict dist/*
+          uv build --out-dir "$RUNNER_TEMP/release-dist"
+          uvx twine check --strict "$RUNNER_TEMP/release-dist"/*
       - name: Save distributions for PyPI publishing
         uses: actions/upload-artifact@v4
         with:
           name: created-release-dists
           path: |
-            dist/*.whl
-            dist/*.tar.gz
+            ${{ runner.temp }}/release-dist/*.whl
+            ${{ runner.temp }}/release-dist/*.tar.gz
           if-no-files-found: error
       - name: Create release with distributions
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_DIST: ${{ runner.temp }}/release-dist
         run: |
-          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz \
+          gh release create "$RELEASE_TAG" "$RELEASE_DIST"/*.whl "$RELEASE_DIST"/*.tar.gz \
             --target "$GITHUB_SHA" \
             --title "$RELEASE_TAG" \
             --generate-notes

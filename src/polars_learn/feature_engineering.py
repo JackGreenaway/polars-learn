@@ -1,7 +1,7 @@
 """Sequential feature engineering for scikit-learn pipelines."""
 
 from collections.abc import Sequence
-from typing import Self
+from typing import Any, Self, TypeAlias, cast
 
 import numpy as np
 import polars as pl
@@ -9,24 +9,33 @@ from sklearn.utils.validation import (
     check_is_fitted,  # pyright: ignore[reportUnknownVariableType]
 )
 
-from ._utils import NativeTransformer, to_polars
+from ._utils import NativeTransformer, frame_schema, to_polars
 from .exceptions import FeatureEngineeringError
 from .feature_spec import FeatureSpec
-from .types import Schema
+from .types import FeatureSpecConfig, Frame, Schema
+
+# Ordinary dict variables have heterogeneous values; validate their kwargs at runtime.
+_FeatureDefinition: TypeAlias = FeatureSpec | FeatureSpecConfig | dict[str, Any]
 
 
 class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
-    """Apply ordered, stateless feature specifications to Polars DataFrames.
+    """Apply ordered feature specifications to Polars DataFrames or LazyFrames.
 
     Parameters
     ----------
-    features : sequence of FeatureSpec
-        Specifications evaluated in order. Later specifications may reference
-        earlier outputs. An empty sequence produces an identity transformation.
-        The constructor retains this parameter unchanged for estimator cloning.
+    features : FeatureSpec, dict, or sequence of FeatureSpec/dict
+        A specification or a dict of FeatureSpec keyword arguments, optionally
+        in an ordered sequence mixing both forms. Dicts are unpacked into
+        FeatureSpec and validated before processing input. Single definitions
+        are treated as one-element sequences. Later specifications may reference
+        earlier outputs. An empty sequence produces an identity transformation;
+        an empty dict is invalid. The original parameter is retained unchanged
+        for estimator cloning.
     convert_pandas : bool, default=False
         Allow pandas DataFrames and convert them to Polars. Requires pandas;
         some dtypes also require PyArrow. No conversion occurs for Polars input.
+    verbosity : {0, 1, 2}, default=0
+        Print progress at 1 and schema/operation details at 2; 0 is silent.
     warn_on_conversion : bool, default=True
         Emit ``PandasConversionWarning`` when converting pandas input.
 
@@ -43,6 +52,15 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     output_features_ : ndarray of shape (n_features_out_,), dtype=object
         Output column names, including retained inputs and engineered features.
 
+    Raises
+    ------
+    TypeError
+        If feature definitions or common options have invalid types, a config
+        dict has unknown keys, or a config has invalid FeatureSpec value types.
+    ValueError
+        If verbosity is outside 0, 1, and 2 or a config dict fails FeatureSpec
+        validation, such as conflicting expression arguments or an empty dict.
+
     See Also
     --------
     FeatureSpec : Describe one feature operation.
@@ -50,55 +68,94 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
     Notes
     -----
-    The public API accepts eager DataFrames. Internally, lazy operations retain
-    dependency order and collect once per execution. Fitting executes the
-    training transformation to validate it but learns no feature statistics.
+    The public API accepts DataFrames and LazyFrames. Lazy inputs are checked
+    using schema metadata and return unevaluated plans by default. Eager input
+    executes the training transformation; lazy fit validates its schema only.
+    Value-dependent errors in lazy plans surface when collected.
     Transform requires fitted input names and order and the fitted output schema.
-    Both default and explicitly requested Polars output remain native Polars.
+    Default output preserves input kind. set_output(transform="polars")
+    collects a DataFrame; "polars-lazy" returns a LazyFrame, which may wrap an
+    evaluated result for eager input. Fit always returns self. fit_transform
+    calls fit then transform and evaluates eager feature expressions twice.
 
     Examples
     --------
     >>> import polars as pl
     >>> from polars_learn import FeatureEngineer, FeatureSpec
     >>> X = pl.DataFrame({"price": [10.0], "quantity": [2]})
-    >>> engineer = FeatureEngineer([
+    >>> engineer = FeatureEngineer(
     ...     FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional")
-    ... ])
+    ... )
     >>> engineer.fit_transform(X)["notional"].to_list()
     [20.0]
     >>> engineer.get_feature_names_out().tolist()
     ['price', 'quantity', 'notional']
+    >>> configured = FeatureEngineer({
+    ...     "expression": pl.col("price") * pl.col("quantity"),
+    ...     "alias": "notional",
+    ... })
+    >>> configured.fit_transform(X)["notional"].to_list()
+    [20.0]
     """
 
     def __init__(
         self,
-        features: Sequence[FeatureSpec],
+        features: _FeatureDefinition | Sequence[_FeatureDefinition],
         *,
         convert_pandas: bool = False,
         warn_on_conversion: bool = True,
+        verbosity: int = 0,
     ) -> None:
         self.features = features
         self.convert_pandas = convert_pandas
         self.warn_on_conversion = warn_on_conversion
+        self.verbosity = verbosity
+        self._validate_options()
+        self._validate_features()
 
-    def _input(self, X: object) -> pl.DataFrame:
-        return to_polars(
+    @staticmethod
+    def _as_spec(definition: object, *, label: str) -> FeatureSpec:
+        if isinstance(definition, FeatureSpec):
+            return definition
+        if isinstance(definition, dict):
+            try:
+                return FeatureSpec(**cast(FeatureSpecConfig, definition))
+            except (TypeError, ValueError) as exc:
+                raise type(exc)(f"{label}: invalid FeatureSpec config: {exc}") from exc
+        raise TypeError(f"{label} must be a FeatureSpec or a FeatureSpec config dict.")
+
+    def _validate_features(self) -> tuple[FeatureSpec, ...]:
+        """Normalize and validate operations without mutating estimator parameters."""
+        if isinstance(self.features, (FeatureSpec, dict)):
+            return (self._as_spec(self.features, label="features"),)
+        if not isinstance(self.features, Sequence) or isinstance(self.features, str):
+            raise TypeError(
+                "features must be a FeatureSpec, a FeatureSpec config dict, or an "
+                "ordered sequence of those definitions."
+            )
+        return tuple(
+            self._as_spec(definition, label=f"features[{index}]")
+            for index, definition in enumerate(self.features)
+        )
+
+    def _input(self, X: object) -> tuple[Frame, tuple[FeatureSpec, ...]]:
+        self._validate_options()
+        specs = self._validate_features()
+        self._report("Validating input")
+        frame = to_polars(
             X,
             convert_pandas=self.convert_pandas,
             warn_on_conversion=self.warn_on_conversion,
         )
+        self._report_frame(frame, stage="Input")
+        return frame, specs
 
-    def _execute(self, frame: pl.DataFrame) -> pl.DataFrame:
-        if not isinstance(self.features, Sequence) or isinstance(self.features, str):
-            raise TypeError(
-                "features must be an ordered sequence of FeatureSpec objects."
-            )
-        plan = frame.lazy()
+    def _execute(self, frame: Frame, specs: tuple[FeatureSpec, ...]) -> Frame:
+        plan = frame.lazy() if isinstance(frame, pl.DataFrame) else frame
         labels: list[str] = []
-        for index, spec in enumerate(self.features):
-            if not isinstance(spec, FeatureSpec):
-                raise TypeError(f"features[{index}] must be a FeatureSpec.")
+        for index, spec in enumerate(specs):
             label = spec.name or f"specification {index}: {spec!r}"
+            self._report(f"Applying {label}", level=2)
             labels.append(label)
             try:
                 plan = plan.with_columns(spec.expressions)
@@ -115,10 +172,21 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
                     f"Failed to generate {label}: {exc}"
                 ) from exc
         try:
+            if isinstance(frame, pl.LazyFrame):
+                plan.collect_schema()
+                return plan
             return plan.collect()
         except Exception as exc:
             raise FeatureEngineeringError(
                 f"Failed to execute feature plan ({'; '.join(labels)}): {exc}"
+            ) from exc
+
+    def _collect(self, result: pl.LazyFrame) -> pl.DataFrame:
+        try:
+            return result.collect()
+        except Exception as exc:
+            raise FeatureEngineeringError(
+                f"Failed to execute feature plan: {exc}"
             ) from exc
 
     def fit(self, X: object, y: object = None) -> Self:
@@ -126,8 +194,9 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
         Parameters
         ----------
-        X : polars.DataFrame or pandas.DataFrame of shape (n_samples, n_features)
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Training data. Pandas input requires ``convert_pandas=True``.
+            Lazy training validates plan schemas without evaluating row values.
         y : object, default=None
             Ignored. Present for scikit-learn estimator compatibility.
 
@@ -139,29 +208,33 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         Raises
         ------
         TypeError
-            If input or feature specifications have unsupported types.
+            If input, feature definitions, or options have invalid types, or a
+            config dict contains unknown keys.
+        ValueError
+            If verbosity or FeatureSpec config values are invalid.
         FeatureEngineeringError
             If expressions or drop operations fail. The underlying exception
             is preserved as the cause.
         """
-        frame = self._input(X)
-        result = self._execute(frame)
-        self.feature_names_in_ = np.asarray(frame.columns, dtype=object)
-        self.n_features_in_ = frame.width
-        self.input_schema_: Schema = dict(frame.schema)
-        self.output_schema_: Schema = dict(result.schema)
-        self.output_features_ = np.asarray(result.columns, dtype=object)
+        frame, specs = self._input(X)
+        input_schema = frame_schema(frame)
+        result = self._execute(frame, specs)
+        self.feature_names_in_ = np.asarray(list(input_schema), dtype=object)
+        self.n_features_in_ = len(input_schema)
+        self.input_schema_: Schema = input_schema
+        self.output_schema_: Schema = frame_schema(result)
+        self.output_features_ = np.asarray(list(frame_schema(result)), dtype=object)
+        self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
-    def fit_transform(
-        self, X: object, y: object = None, **fit_params: object
-    ) -> pl.DataFrame:
+    def fit_transform(self, X: object, y: object = None, **fit_params: object) -> Frame:
         """Fit to training data and return its transformed representation.
 
         Parameters
         ----------
-        X : polars.DataFrame or pandas.DataFrame of shape (n_samples, n_features)
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Training data. Pandas input requires ``convert_pandas=True``.
+            Lazy training validates plan schemas without evaluating row values.
         y : object, default=None
             Ignored. Present for scikit-learn estimator compatibility.
         **fit_params : dict
@@ -170,8 +243,9 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
 
         Returns
         -------
-        X_transformed : polars.DataFrame of shape (n_samples, n_features_out)
-            Result of fitting this transformer and transforming the same data.
+        X_transformed : polars.DataFrame or polars.LazyFrame
+            Result of fitting and transforming the same input. Default preserves
+            input kind; set_output can force an eager or lazy container.
 
         See Also
         --------
@@ -184,42 +258,54 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
             )
         return self.fit(X, y).transform(X)
 
-    def transform(self, X: object) -> pl.DataFrame:
+    def transform(self, X: object) -> Frame:
         """Generate features and verify the fitted output schema.
 
         Parameters
         ----------
-        X : polars.DataFrame or pandas.DataFrame of shape (n_samples, n_features)
+        X : polars.DataFrame, polars.LazyFrame or pandas.DataFrame
             Input with the fitted column names and order. Pandas input requires
             ``convert_pandas=True``. Input dtypes may differ only if the final
             output schema still matches the fitted expectations.
 
         Returns
         -------
-        X_transformed : polars.DataFrame of shape (n_samples, n_features_out)
-            Retained and engineered columns in native Polars order.
+        X_transformed : polars.DataFrame or polars.LazyFrame
+            Retained and engineered columns in native Polars order. Default
+            preserves input kind; set_output can force an eager or lazy container.
 
         Raises
         ------
         sklearn.exceptions.NotFittedError
             If ``fit`` has not completed successfully.
         TypeError
-            If the input is unsupported or pandas conversion is disabled.
+            If input, features, or options are unsupported, config keys are unknown,
+            or pandas conversion is disabled.
+        ValueError
+            If verbosity or FeatureSpec config values are invalid.
         FeatureEngineeringError
             If input columns differ, feature execution fails, or the generated
             output schema differs from the fitted schema.
+
+        Notes
+        -----
+        Schema/dependency errors fail before a lazy plan is returned. Value
+        errors in that plan occur when collected and can be native Polars
+        errors. Explicit eager output wraps execution errors in
+        FeatureEngineeringError, preserving their causes.
         """
         check_is_fitted(self, "output_schema_")
-        frame = self._input(X)
-        if frame.columns != self.feature_names_in_.tolist():
+        frame, specs = self._input(X)
+        input_schema = frame_schema(frame)
+        if list(input_schema) != self.feature_names_in_.tolist():
             raise FeatureEngineeringError(
                 f"Input columns must match fitted names and order. Expected "
-                f"{self.feature_names_in_.tolist()}, received {frame.columns}."
+                f"{self.feature_names_in_.tolist()}, received {list(input_schema)}."
             )
-        result = self._execute(frame)
-        if list(result.schema.items()) != list(self.output_schema_.items()):
+        result = self._execute(frame, specs)
+        if list(frame_schema(result).items()) != list(self.output_schema_.items()):
             raise FeatureEngineeringError(
                 f"Output schema differs from fit. Expected {self.output_schema_}, "
-                f"received {dict(result.schema)}."
+                f"received {frame_schema(result)}."
             )
-        return result
+        return self._finish(result)

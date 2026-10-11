@@ -8,7 +8,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.estimator_checks import estimator_checks_generator
 
-from polars_learn import FeatureEngineer, FeatureSpec, SchemaValidator
+from polars_learn import (
+    FeatureEngineer,
+    FeaturePassthrough,
+    FeatureSpec,
+    SchemaValidator,
+)
 
 
 def preprocessing():
@@ -64,7 +69,15 @@ def test_real_pipeline(frame):
     np.testing.assert_array_equal(copied.predict(frame), model.predict(frame))
 
 
-@pytest.mark.parametrize("estimator", [FeatureEngineer([]), SchemaValidator()])
+@pytest.mark.parametrize(
+    "estimator",
+    [
+        FeaturePassthrough(["price"]),
+        FeatureEngineer([]),
+        FeatureEngineer({"expression": pl.col("price")}),
+        SchemaValidator(),
+    ],
+)
 def test_output_protocol(frame, estimator):
     assert estimator.set_output(transform="polars") is estimator
     with config_context(transform_output="pandas"):
@@ -76,7 +89,15 @@ def test_output_protocol(frame, estimator):
         estimator.set_output(transform="pandas")
 
 
-@pytest.mark.parametrize("estimator", [FeatureEngineer([]), SchemaValidator()])
+@pytest.mark.parametrize(
+    "estimator",
+    [
+        FeaturePassthrough(["price"]),
+        FeatureEngineer([]),
+        FeatureEngineer({"expression": pl.col("price")}),
+        SchemaValidator(),
+    ],
+)
 def test_relevant_estimator_checks(estimator):
     # Array-input checks intentionally don't apply to this DataFrame-only API.
     relevant = {
