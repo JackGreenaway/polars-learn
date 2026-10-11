@@ -7,7 +7,34 @@
   --docs-soft: rgba(94, 234, 212, 0.07);
 }
 body { line-height: 1.75; }
-.navbar { border-bottom: 3px solid var(--docs-accent); }
+/* Bootstrap's fixed bg-light utility can clash with dark-mode text.
+   Give the top header its own consistent palette in both document modes. */
+.navbar.fixed-top {
+  --bs-navbar-color: #ffffff;
+  --bs-navbar-hover-color: #ffffff;
+  --bs-navbar-active-color: #ffffff;
+  --bs-navbar-disabled-color: #cbd5e1;
+  --bs-navbar-brand-color: #ffffff;
+  --bs-navbar-brand-hover-color: #ffffff;
+  --bs-navbar-toggler-border-color: rgba(255, 255, 255, 0.6);
+  background-color: #134e4a !important;
+  background-image: none;
+  border-bottom: 3px solid #2dd4bf;
+}
+.navbar.fixed-top .navbar-brand,
+.navbar.fixed-top .nav-link {
+  color: #ffffff;
+  text-shadow: none;
+}
+.navbar.fixed-top .nav-link:hover,
+.navbar.fixed-top .nav-link:focus-visible {
+  color: #ffffff;
+  background-color: #0f3d3a;
+  border-radius: 0.25rem;
+}
+.navbar.fixed-top .nav-link.disabled { color: #cbd5e1; }
+.navbar.fixed-top a:focus-visible,
+.navbar.fixed-top button:focus-visible { outline-color: #ffffff; }
 .navbar-brand { font-weight: 750; letter-spacing: -0.025em; }
 h1 {
   font-weight: 750;

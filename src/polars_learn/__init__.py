@@ -19,7 +19,7 @@ from .feature_spec import ColumnSelector, FeatureSpec
 from .passthrough import FeaturePassthrough
 from .schema_validation import SchemaSpec, SchemaValidator
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "ColumnSelector",
