@@ -37,6 +37,8 @@ Read the [complete documentation](https://jackgreenaway.github.io/polars-learn/)
 
 ## Why use polars-learn?
 
+If standard scaling and polynomial features belong inside a fitted pipeline, why leave full feature generation outside it? The [homepage walkthrough](docs/index.md#why-pipeline-scaling-but-leave-feature-generation-outside) compares a separate preparation function with a pipeline that carries its feature definitions into prediction, and shows [the issue each class addresses](docs/index.md#how-each-class-addresses-a-concrete-risk).
+
 **Bring the power of the Polars API into the fitted model pipeline.** Define feature logic with native Polars expressions, compose it with an estimator, and reuse the same preparation during training, validation, and prediction.
 
 - **Express rich transformations without a new class for every feature.** Combine arithmetic, conditions, string and datetime operations, casts, null handling, and selectors in reusable `FeatureSpec` definitions. Polars supplies the expression engine; `polars-learn` makes that logic a pipeline component.
