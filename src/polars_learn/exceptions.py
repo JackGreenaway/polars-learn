@@ -19,6 +19,10 @@ class SchemaValidationError(PolarsLearnError):
     """
 
 
+class ValueValidationError(PolarsLearnError):
+    """Raised when a named row-level value check fails or cannot run."""
+
+
 class FeatureEngineeringError(PolarsLearnError):
     """Raised when feature planning, schema checks, or eager execution fail.
 

@@ -39,6 +39,87 @@ def test_fit_transform_names_and_state(frame):
     assert est.get_feature_names_out()[0] == "price"
 
 
+def test_fit_does_not_execute_feature_expressions(frame):
+    calls = 0
+
+    def count_batches(batch):
+        nonlocal calls
+        calls += 1
+        return batch
+
+    source = frame.lazy().map_batches(
+        count_batches, schema=frame.schema, validate_output_schema=True
+    )
+    est = FeatureEngineer([FeatureSpec(pl.col("price") + 1, alias="next_price")])
+    original = frame.clone()
+    est.fit(source)
+    assert calls == 0
+    assert_frame_equal(frame, original)
+    result = est.transform(source)
+    assert calls == 0
+    assert result.collect()["next_price"].to_list() == [2.0, 3.0, 4.0, 5.0]
+    assert calls == 1
+
+
+def test_fit_transform_executes_feature_source_once(frame):
+    calls = 0
+
+    def count_batches(batch):
+        nonlocal calls
+        calls += 1
+        return batch
+
+    source = frame.lazy().map_batches(count_batches, schema=frame.schema)
+    result = FeatureEngineer(
+        [FeatureSpec(pl.col("price") + 1, alias="next_price")]
+    ).fit_transform(source)
+    assert calls == 0
+    result.collect()
+    assert calls == 1
+
+
+def test_eager_fit_transform_executes_python_feature_once(frame):
+    calls = 0
+
+    def add_one(values):
+        nonlocal calls
+        calls += 1
+        return values + 1
+
+    original = frame.clone()
+    expression = pl.col("price").map_batches(add_one, return_dtype=pl.Float64)
+    est = FeatureEngineer([FeatureSpec(expression, alias="next_price")])
+    est.fit(frame)
+    assert calls == 0
+    assert_frame_equal(frame, original)
+    result = est.fit_transform(frame)
+    assert result["next_price"].to_list() == [2.0, 3.0, 4.0, 5.0]
+    assert calls == 1
+
+
+def test_refit_replaces_schema_contract_on_same_estimator(frame):
+    est = engineer().fit(frame)
+    changed = pl.DataFrame({"amount": [5], "count": [2]})
+    est.set_params(
+        features=[FeatureSpec(pl.col("amount") * pl.col("count"), alias="total")]
+    )
+    assert est.fit(changed) is est
+    assert est.feature_names_in_.tolist() == ["amount", "count"]
+    assert est.output_features_.tolist() == ["amount", "count", "total"]
+    assert est.transform(changed)["total"].to_list() == [10]
+
+
+def test_failed_refit_keeps_previous_schema_contract(frame):
+    est = engineer().fit(frame)
+    old_names = est.feature_names_in_.copy()
+    old_output = est.output_features_.copy()
+    est.set_params(features=[FeatureSpec(pl.col("missing"), name="bad")])
+    with pytest.raises(FeatureEngineeringError):
+        est.fit(frame)
+    assert est.feature_names_in_.tolist() == old_names.tolist()
+    assert est.output_features_.tolist() == old_output.tolist()
+
+
 def test_not_fitted_and_unsupported_input(frame):
     with pytest.raises(NotFittedError):
         engineer().transform(frame)
@@ -73,8 +154,9 @@ def test_input_names_checked(frame, frame_change):
     ],
 )
 def test_execution_errors_chained(frame, features):
+    est = FeatureEngineer(features)
     with pytest.raises(FeatureEngineeringError) as caught:
-        FeatureEngineer(features).fit(frame)
+        est.fit(frame).transform(frame)
     assert caught.value.__cause__ is not None
 
 

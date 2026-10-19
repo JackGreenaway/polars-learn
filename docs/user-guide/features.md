@@ -57,7 +57,7 @@ Existing columns can be overwritten: `FeatureSpec(pl.col("price") + 1)` replaces
 
 `FeatureEngineer.transform` requires the fitted input names in exactly the same order, and the resulting output names, order, and dtypes must match the fitted output schema. Input dtypes may differ if the final output schema still matches. Use a `SchemaValidator` first when input types need a defined conversion policy.
 
-Fitting eager input evaluates the feature expressions. Fitting lazy input checks the plan's schema without evaluating rows. Features do not learn statistics; use deterministic expressions. Currently `fit_transform` calls both `fit` and `transform`, so eager feature expressions are evaluated twice.
+Fitting resolves the input and resulting output schemas from metadata; it does not evaluate feature expressions on rows or modify the input. `transform` evaluates the expressions once for eager output, while lazy output defers evaluation until collection. Features do not learn statistics; use deterministic expressions. `fit_transform` fits the schema and then transforms once. Python callbacks should declare `return_dtype` so Polars can resolve their output schema without calling them during fit.
 
 ## Sibling features and dependent stages
 
@@ -232,7 +232,7 @@ assert_frame_equal(restored.transform(raw.lazy()).collect(), expected)
 
 Declare `return_dtype` explicitly so fitting and lazy schema checks know the callback's output type. With `skip_nulls=True`, null inputs are not passed to the function and remain null. For multi-column scalar logic, map a `pl.struct(...)` expression and read its fields in the callback. For functions that operate on a whole Series, Polars `map_batches` expressions are also supported; declare their output dtype and only mark them elementwise when that matches their behavior.
 
-The function should be pure and deterministic, with serializable state. Eager `fit_transform` evaluates feature logic during both fit and transform, and lazy plans may execute again when collected; callbacks must not rely on being called once or perform external side effects. A callback does not automatically learn or freeze training statistics.
+The function should be pure and deterministic, with serializable state. Fit resolves schemas without evaluating rows, and `fit_transform` evaluates eager feature logic once during transform. Lazy plans can execute again if collected more than once; callbacks should not perform external side effects. A callback does not automatically learn or freeze training statistics.
 
 `polars-learn` serializes the Polars expression, which uses cloudpickle for its embedded Python callback. Saving a fitted pipeline containing this engineer carries the callback with its feature logic. Tests also restore local callback closures and complete fitted pipelines in a fresh Python process using pickle, cloudpickle, and joblib. Imported helper modules and external resources are not bundled automatically; make them available in the deployment environment. See [custom-function persistence](persistence.md#saving-custom-python-feature-functions) for deployment guidance.
 
@@ -242,7 +242,7 @@ The function should be pure and deterministic, with serializable state. Eager `f
 
 ## Evaluation and mutation
 
-Input frames are never mutated. Expressions within one specification execute together and cannot consume new sibling outputs; split dependencies into ordered specifications. Existing names may be deliberately overwritten. `fit_transform` calls `fit` and then `transform`, so eager feature expressions execute twice. Lazy inputs defer row execution unless eager output is requested. Prefer native expressions to Python callbacks for portable, reviewable feature logic.
+Input frames are never mutated. Expressions within one specification execute together and cannot consume new sibling outputs; split dependencies into ordered specifications. Existing names may be deliberately overwritten. `fit_transform` calls `fit` and then `transform`; fit resolves schema only, so eager feature expressions execute once. Lazy inputs defer row execution unless eager output is requested. Prefer native expressions to Python callbacks for portable, reviewable feature logic.
 
 See [`FeatureSpec`](../api.md#featurespec) and [`FeatureEngineer`](../api.md#featureengineer) for exact validation, fitted schema, and exception behavior.
 

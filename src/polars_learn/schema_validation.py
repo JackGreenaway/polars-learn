@@ -182,11 +182,11 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
         """
         frame = self._input(X)
         input_schema = frame_schema(frame)
-        result = self._validate(frame)
+        output_names = self._output_names(frame)
         self.schema_ = dict(self.schema)
         self.feature_names_in_ = np.asarray(list(input_schema), dtype=object)
         self.n_features_in_ = len(input_schema)
-        self.output_features_ = np.asarray(list(frame_schema(result)), dtype=object)
+        self.output_features_ = np.asarray(output_names, dtype=object)
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
@@ -235,6 +235,11 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
         return self.fit(X, y).transform(X)
 
     def _validate(self, frame: Frame) -> Frame:
+        output_names = self._output_names(frame)
+        return frame.select(output_names)
+
+    def _output_names(self, frame: Frame) -> list[str]:
+        """Validate the frame contract and return output names from its schema."""
         self._validate_schema()
         input_schema = frame_schema(frame)
         expected_names = list(self.schema)
@@ -258,11 +263,10 @@ class SchemaSpec(NativeTransformer, auto_wrap_output_keys=None):
                     f"Column {column!r} has dtype {got}, expected {expected_dtype}."
                 )
         if self.extra_columns == "drop":
-            return frame.select(expected_names)
+            return expected_names
         if self.allow_extra_columns:
-            ordered = expected_names + extras
-            return frame.select(ordered)
-        return frame.select(expected_names)
+            return expected_names + extras
+        return expected_names
 
     def transform(self, X: object) -> OutputFrame:
         """Check exact required dtypes and return the fitted output columns.

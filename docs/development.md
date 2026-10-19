@@ -154,7 +154,7 @@ and source-generated contracts used by the current scikit-learn
 [StandardScaler class reference](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html),
 and [train_test_split function reference](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html).
 There are no public standalone functions in this package; the reference covers
-its six components and six exported exceptions/warnings. Private helpers are excluded.
+its seven components and seven exported exceptions/warnings. Private helpers are excluded.
 
 The existing MkDocs theme supplies search, syntax highlighting, responsive
 navigation, a keyboard skip link, and a light/dark toggle. Equations use native

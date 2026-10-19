@@ -80,7 +80,7 @@ assert raw_predict.columns == ["price", "quantity"]
 
 The prediction input contains `price` and `quantity`; you supply neither `notional` nor `log_notional`. `pipeline.predict(raw_predict)` validates the raw schema, computes the derived columns, drops `quantity` from the model input, and then predicts. Keep the target `y` separate from the raw feature frame. Fit the complete pipeline on training input and reuse that fitted pipeline for validation and prediction.
 
-The pipeline expects the fitted raw input contract at prediction time. Do not feed it a frame that has already been feature-engineered, or refit its preprocessing on prediction data. Missing required raw columns and incompatible schemas raise errors according to the configured policies.
+The pipeline expects the fitted raw input contract at prediction time. Do not feed it a frame that has already been feature-engineered, or refit its preprocessing on prediction data. Add [row-level value checks](user-guide/value-validation.md) when nulls, bounds, or allowed categories must be enforced. Missing required raw columns and incompatible schemas raise errors according to the configured policies.
 
 The individual transformers also work on their own: `fit(X)` returns the transformer, `transform(X)` applies it, and `fit_transform(X)` fits and prepares the same input. Calling `transform` or `get_feature_names_out` before a successful fit raises scikit-learn's `NotFittedError`. Input frames are never mutated.
 

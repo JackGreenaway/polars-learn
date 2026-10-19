@@ -1,6 +1,6 @@
 # Diagnostics and errors
 
-All six classes accept an integer `verbosity`:
+All seven public classes accept an integer `verbosity`:
 
 | Level         | Output to standard output                                                          |
 | ------------- | ---------------------------------------------------------------------------------- |
@@ -36,14 +36,16 @@ validated = validator.fit_transform(X)
 | `SchemaSpec` contract or fitted output-name mismatch                                    | `ValueError`                        | Fit/transform schema check                  |
 | `ColumnSelector`/`FeaturePassthrough` missing columns or fitted output-name mismatch    | `ValueError`                        | Fit/transform schema check                  |
 | `SchemaValidator` missing columns, disallowed extras/order/types, or eager cast failure | `SchemaValidationError`             | Transform                                   |
-| Feature dependency, drop, or schema failure; eager feature execution failure            | `FeatureEngineeringError`           | Fit/transform                               |
+| `ValueValidator` check false/null or check evaluation failure                       | `ValueValidationError`               | Transform/fit_transform, including lazy input |
+| Feature dependency, drop, or schema failure                                         | `FeatureEngineeringError`           | Fit/transform schema check                   |
+| Eager feature execution failure                                                      | `FeatureEngineeringError`           | Transform/fit_transform                      |
 | Value-dependent feature failure or permissive cast failure in a returned lazy plan      | Native Polars exception             | `collect()` or another execution operation  |
 | Lossy semi-strict integer to Float64 cast in a lazy plan                                | `SchemaValidationError`             | Lazy execution                              |
 | Enabled pandas conversion with warnings enabled                                         | `PandasConversionWarning`           | Conversion, even at verbosity 0             |
 
-`PolarsLearnError` is the base of `SchemaValidationError` and `FeatureEngineeringError`. Plain `TypeError`/`ValueError`, `NotFittedError`, and native Polars errors do not inherit from it. Input query and source failures can also propagate as native Polars or source exceptions during schema resolution or collection. Wrapped errors preserve their original exception as `__cause__`.
+`PolarsLearnError` is the base of `SchemaValidationError`, `ValueValidationError`, and `FeatureEngineeringError`. Plain `TypeError`/`ValueError`, `NotFittedError`, and native Polars errors do not inherit from it. Input query and source failures can also propagate as native Polars or source exceptions during schema resolution or collection. Wrapped errors preserve their original exception as `__cause__`.
 
-To force value evaluation within `transform`, request `"polars"` output. `FeatureEngineer` wraps resulting execution errors in `FeatureEngineeringError`; `SchemaValidator` wraps Polars collection errors in `SchemaValidationError`. `SchemaSpec`, `ColumnSelector`, and `FeaturePassthrough` do not wrap source/collection errors.
+For structural/feature transformers, request `"polars"` output to force value evaluation within `transform`. `ValueValidator.fit` checks expression schemas only; its row checks run in `transform`, including for lazy input. `FeatureEngineer.fit` resolves the feature schema only; feature expressions run in `transform`. `FeatureEngineer` wraps resulting execution errors in `FeatureEngineeringError`; `SchemaValidator` wraps Polars collection errors in `SchemaValidationError`. `SchemaSpec`, `ColumnSelector`, and `FeaturePassthrough` do not wrap source/collection errors.
 
 ## Warning controls
 

@@ -1,6 +1,6 @@
 # polars-learn
 
-Native Polars feature engineering and schema contracts inside scikit-learn pipelines.
+Native Polars feature engineering, schema contracts, and row-level value checks inside scikit-learn pipelines.
 For Python users who want the same preparation path during training and prediction:
 compose ordered expressions, validate declared or learned schemas, and select model
 columns. Supports eager and lazy Polars frames and optional pandas conversion.

@@ -45,3 +45,40 @@ jobs:
         run: |
           uv run --locked --with polars==1.35.2 python tests/cross_version_persistence.py write "$RUNNER_TEMP/older.pkl"
           uv run --locked python tests/cross_version_persistence.py read "$RUNNER_TEMP/older.pkl"
+
+  minimum-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install Python
+        run: uv python install 3.11
+      - name: Create isolated environment
+        run: uv venv --python 3.11 .venv-min
+      - name: Install declared minimum runtime dependencies
+        run: >-
+          uv pip install --python .venv-min/bin/python --resolution lowest-direct
+          "polars==1.20.0" "scikit-learn==1.6.0" "numpy==1.24.0"
+          "cloudpickle>=3" "pytest>=8" "pandas>=2" "pyarrow>=14"
+      - name: Install checkout without resolving newer dependencies
+        run: uv pip install --python .venv-min/bin/python --no-deps -e .
+      - name: Test minimum dependency set
+        run: .venv-min/bin/python -m pytest --doctest-modules src tests
+
+  wheel-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install Python
+        run: uv python install 3.11
+      - name: Build wheel
+        run: uv build --wheel --out-dir dist
+      - name: Install wheel in a clean environment
+        run: |
+          uv venv --python 3.11 .venv-wheel
+          uv pip install --python .venv-wheel/bin/python dist/*.whl
+      - name: Import installed package outside the checkout
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv-wheel/bin/python" -c 'import polars as pl; from polars_learn import SchemaValidator, ValueValidator; frame = pl.DataFrame({"x": [1, 2]}); assert ValueValidator({"positive": pl.col("x") > 0}).fit_transform(frame).equals(frame); assert SchemaValidator().fit_transform(frame).equals(frame)'

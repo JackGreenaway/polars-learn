@@ -198,12 +198,13 @@ class ColumnSelector(NativeTransformer, auto_wrap_output_keys=None):
         missing = [column for column in selected if column not in input_schema]
         if missing:
             raise ValueError(f"Missing required columns: {missing}.")
-        result = frame.select(selected)
-        if self.rename is not None:
-            result = result.rename(self.rename)
+        output_names = [
+            self.rename.get(column, column) if self.rename else column
+            for column in selected
+        ]
         self.feature_names_in_ = np.asarray(list(input_schema), dtype=object)
         self.n_features_in_ = len(input_schema)
-        self.output_features_ = np.asarray(list(frame_schema(result)), dtype=object)
+        self.output_features_ = np.asarray(output_names, dtype=object)
         self.columns_ = selected
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self

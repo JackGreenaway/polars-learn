@@ -12,6 +12,7 @@ installation and a complete prediction workflow. See [Development](development.m
 | Apply calculations inside a model pipeline | `FeatureEngineer` | Applies specs in entry order, records input/output schema during fit, and replays and checks preparation during transform. |
 | Enforce an application-defined schema | `SchemaSpec` | Checks exact required names and dtypes without casting; records the fitted output layout. |
 | Enforce the training data's schema | `SchemaValidator` | Learns names/order/dtypes during fit, then validates and performs only the casts allowed by its mode. |
+| Enforce row-level input rules | `ValueValidator` | Applies named Boolean Polars expressions; false and null results raise `ValueValidationError`. |
 | Select and optionally rename model inputs | `ColumnSelector` | Selects configured columns in entry order and checks fitted output names; values are unchanged. |
 | Retain selected features unchanged | `FeaturePassthrough` | Uses the same selection behavior without renaming; useful for unchanged branches. |
 
@@ -27,13 +28,15 @@ Choose a class for its purpose, input/output examples, constructor parameters, a
 | [FeatureSpec](classes/feature-spec.md) | One expression or sequence, aliases, drops, and diagnostic labels. | [Parameters](classes/feature-spec.md#parameters) · [Reference](classes/feature-spec.md#reference) |
 | [SchemaSpec](classes/schema-spec.md) | An explicitly declared required schema. | [Parameters](classes/schema-spec.md#parameters) · [Reference](classes/schema-spec.md#reference) |
 | [SchemaValidator](classes/schema-validator.md) | A learned training schema and conversion policy. | [Parameters](classes/schema-validator.md#parameters) · [Reference](classes/schema-validator.md#reference) |
+| [ValueValidator](classes/value-validator.md) | Named row-level checks for nulls, bounds, and allowed values. | [Parameters](classes/value-validator.md#parameters) · [Reference](classes/value-validator.md#reference) |
 | [ColumnSelector](classes/column-selector.md) | Column selection, ordering, and optional renaming. | [Parameters](classes/column-selector.md#parameters) · [Reference](classes/column-selector.md#reference) |
 | [FeaturePassthrough](classes/feature-passthrough.md) | Explicit unchanged-column selection. | [Parameters](classes/feature-passthrough.md#parameters) · [Reference](classes/feature-passthrough.md#reference) |
 
 ## Shared Transformer Behavior
 
-`ColumnSelector`, `FeaturePassthrough`, `SchemaSpec`, `SchemaValidator`, and
-`FeatureEngineer` implement the scikit-learn transformer/estimator interface.
+`ColumnSelector`, `FeaturePassthrough`, `SchemaSpec`, `SchemaValidator`,
+`ValueValidator`, and `FeatureEngineer` implement the scikit-learn
+transformer/estimator interface.
 They compose through fit/transform and scikit-learn's parameter conventions,
 following the same estimator pattern used by libraries such as XGBoost.
 `FeatureSpec` describes an operation and is not an estimator.
@@ -60,9 +63,12 @@ transformers' returns. Explicit output choices survive cloning.
 
 Default return type follows the input of each transform call, not the input
 used during fitting. Lazy schema checks use metadata and do not evaluate rows;
-source metadata access can still occur. Value-dependent failures occur at query
-execution. Requesting lazy output for eager input can wrap an already evaluated
-result. To defer row evaluation throughout, supply a LazyFrame.
+source metadata access can still occur. `ValueValidator` is an explicit
+value-check boundary: fit resolves check schemas only; transform materializes
+lazy input and evaluates checks, then returns a lazy wrapper over the checked in-memory
+frame by default. Downstream collection will not reread the source. Other
+transformers defer value-dependent failures until query execution. Requesting
+lazy output for eager input can wrap an already evaluated result.
 
 ### Estimator Conventions
 
@@ -82,7 +88,7 @@ output setting, not a general model option.
 
 ### Common Constructor Options
 
-These options are keyword-only on all five transformers:
+These options are keyword-only on all six transformers:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -112,7 +118,7 @@ Invalid options changed through `set_params` are checked at the next relevant
 fit/transform operation. A failed refit can leave a previous successful fitted
 state in place; use a fresh instance if that state should be discarded.
 
-All five transformers expose these fitted attributes:
+All six transformers expose these fitted attributes:
 
 | Attribute | Meaning |
 | --- | --- |
@@ -267,7 +273,7 @@ assert contract.fit_transform(X).columns == ["x"]
 ## SchemaValidator
 
 <!-- BEGIN SIGNATURE:SchemaValidator -->
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L371">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/schema_validation.py#L375">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">SchemaValidator</span>(
     mode=&#x27;strict&#x27;,
     *,
     allow_extra_columns=False,
@@ -332,10 +338,45 @@ assert result["x"].to_list() == [2]
 assert validator.get_feature_names_out().tolist() == ["x"]
 ```
 
+## ValueValidator
+
+<!-- BEGIN SIGNATURE:ValueValidator -->
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/value_validation.py#L16">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">ValueValidator</span>(
+    checks,
+    *,
+    convert_pandas=False,
+    warn_on_conversion=True,
+    verbosity=0,
+)</code></pre></div>
+<!-- END SIGNATURE:ValueValidator -->
+
+`checks` is a nonempty dict of diagnostic names to Boolean Polars expressions.
+False or null results raise `ValueValidationError`. The input's names, order,
+and dtypes must match fitting; passing data is returned unchanged.
+
+Fit resolves check schemas only. Checks run during `transform`, including for
+lazy inputs. Lazy sources are materialized once at the validation call, so a later collection reads the
+checked in-memory frame and does not rerun the source. This uses memory
+proportional to the materialized batch.
+
+```python
+import polars as pl
+
+from polars_learn import ValueValidationError, ValueValidator
+
+check = ValueValidator({"positive": pl.col("x") > 0}).fit(pl.DataFrame({"x": [1, 2]}))
+try:
+    check.transform(pl.DataFrame({"x": [1, -1]}))
+except ValueValidationError as error:
+    assert "positive" in str(error)
+else:
+    raise AssertionError("Invalid value was accepted")
+```
+
 ## FeatureSpec
 
 <!-- BEGIN SIGNATURE:FeatureSpec -->
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L318">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_spec.py#L319">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">FeatureSpec</span>(
     expression,
     *,
     alias=None,
@@ -477,15 +518,15 @@ assert plan.collect().to_dict(as_series=False) == {"x": [1, 2], "b": [4, 6]}
 
 ## Persistence
 
-All six main classes support standard Python pickle round trips. Native `pl.Expr` objects use Polars' built-in serialization, including expressions in single specifications, dict configs, and mixed sequences. Transformer parameters, fitted input/output schemas and names, pandas-conversion settings, and explicit output-container settings are retained. Unfitted instances remain unfitted after loading. The package does not introduce a separate expression encoding or compatibility aliases.
+All seven main classes support standard Python pickle round trips. Native `pl.Expr` objects use Polars' built-in serialization, including expressions in single specifications, dict configs, and mixed sequences. Transformer parameters, fitted input/output schemas and names, pandas-conversion settings, and explicit output-container settings are retained. Unfitted instances remain unfitted after loading. The package does not introduce a separate expression encoding or compatibility aliases.
 
-Tests cover every pickle protocol available to the test interpreter, eager and lazy fitting, native arithmetic/conditional/selector/literal expressions, and Python callback closures. Full fitted pipelines containing all five transformer classes and a model are loaded and used to predict raw observations in fresh Python processes, using pickle, joblib, and cloudpickle. See the [save/load example](user-guide/persistence.md).
+Tests cover every pickle protocol available to the test interpreter, eager and lazy fitting, native arithmetic/conditional/selector/literal expressions, and Python callback closures. Full fitted pipelines containing the transformer classes and a model are loaded and used to predict raw observations in fresh Python processes, using pickle, joblib, and cloudpickle. See the [save/load example](user-guide/persistence.md).
 
 Cloudpickle is an explicit runtime dependency for Python callbacks embedded in Polars expressions. Closures and lambdas with serializable state are covered; arbitrary captured locks, open resources, plugin binaries, or missing external dependencies cannot be guaranteed portable. These limits also apply to caller-supplied custom parameter containers and final estimators.
 
 Saved objects record Python, polars-learn, Polars, scikit-learn, NumPy, and cloudpickle versions. Each mismatch emits `InconsistentVersionWarning` before the object's state is decoded, then loading is attempted. Its attributes are `class_name`, `dependency`, `original_version`, and `current_version`. Use `warnings.simplefilter("error", InconsistentVersionWarning)` to stop before state restoration on a mismatch. To accept mismatches quietly, use `warnings.simplefilter("ignore", InconsistentVersionWarning)` inside `warnings.catch_warnings()` around loading. For application-wide suppression, use `warnings.filterwarnings("ignore", category=InconsistentVersionWarning)`. Other warning categories remain active, and incompatible state still raises `SerializationError`. These filters apply equally to pickle, joblib, and cloudpickle. Final estimators may emit their own version warning categories. Older artifacts without this metadata cannot report creating versions.
 
-Expressions use native binary serialization for matching Polars versions and native JSON for cross-version attempts. Required expression operations, dtypes, callbacks, and other objects must remain compatible and available. Unavailable or rejected representations raise `SerializationError`, preserving version context and the underlying cause; old binary layouts are never used as a cross-version fallback. CI exercises both directions between Polars 1.35.2 and the locked version (currently 1.44.2), including all six main classes and a fitted prediction pipeline.
+Expressions use native binary serialization for matching Polars versions and native JSON for cross-version attempts. Required expression operations, dtypes, callbacks, and other objects must remain compatible and available. Unavailable or rejected representations raise `SerializationError`, preserving version context and the underlying cause; old binary layouts are never used as a cross-version fallback. CI exercises both directions between Polars 1.35.2 and the locked version, including all seven main classes and a fitted prediction pipeline.
 
 Load trusted artifacts only: pickle and embedded callbacks can execute code. Polars does not guarantee expression formats across releases, and arbitrary dependency upgrades cannot be guaranteed compatible. Successful loading does not establish identical feature values or predictions; validate these after upgrading and retain pinned original dependencies for recovery. This contract preserves supported objects and behavior, not byte-identical pickle output.
 

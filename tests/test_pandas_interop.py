@@ -19,6 +19,7 @@ from polars_learn import (
     PandasConversionWarning,
     SchemaSpec,
     SchemaValidator,
+    ValueValidator,
 )
 
 
@@ -28,6 +29,7 @@ from polars_learn import (
         lambda **kw: FeaturePassthrough(["price", "quantity"], **kw),
         lambda **kw: FeatureEngineer([], **kw),
         SchemaValidator,
+        lambda **kw: ValueValidator({"price_positive": pl.col("price") > 0}, **kw),
     ],
 )
 def test_conversion_options(frame, factory):
@@ -112,6 +114,7 @@ assert 'pandas' not in sys.modules
         ),
         lambda: SchemaSpec({"price": pl.Float64, "quantity": pl.Int64}),
         SchemaValidator,
+        lambda: ValueValidator({"price_positive": pl.col("price") > 0}),
     ],
 )
 def test_pandas_output_all_transformers(frame, factory, lazy):

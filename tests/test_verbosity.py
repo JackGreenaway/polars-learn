@@ -9,6 +9,7 @@ from polars_learn import (
     FeatureSpec,
     SchemaSpec,
     SchemaValidator,
+    ValueValidator,
 )
 
 FACTORIES = [
@@ -17,6 +18,7 @@ FACTORIES = [
     lambda **kw: FeatureEngineer(FeatureSpec(pl.col("x") + 1), **kw),
     lambda **kw: SchemaSpec({"x": pl.Int64}, **kw),
     lambda **kw: SchemaValidator(**kw),
+    lambda **kw: ValueValidator({"x_positive": pl.col("x") > 0}, **kw),
 ]
 
 

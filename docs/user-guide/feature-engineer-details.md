@@ -51,4 +51,4 @@ The assertions in the example verify the output against the implementation. Pyth
 
 ## Practical notes
 
-Put the engineer before the predictive estimator and pass raw data to both pipeline.fit and pipeline.predict. It records schemas rather than learned feature statistics; use fitted statistical preprocessing for training-derived means, scales, or vocabularies. Eager fit_transform evaluates expressions twice. See the [complete prediction pipeline](../getting-started.md#your-first-raw-data-prediction-pipeline).
+Put the engineer before the predictive estimator and pass raw data to both pipeline.fit and pipeline.predict. It records schemas rather than learned feature statistics; use fitted statistical preprocessing for training-derived means, scales, or vocabularies. Fit resolves schemas without evaluating rows; eager `fit_transform` executes feature expressions once during transform. See the [complete prediction pipeline](../getting-started.md#your-first-raw-data-prediction-pipeline).

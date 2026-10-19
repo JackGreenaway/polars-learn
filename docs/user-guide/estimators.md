@@ -54,7 +54,7 @@ This shared interface describes how steps compose. The final estimator must also
 
 ## Fitting, cloning, and changing parameters
 
-All five transformers expose `get_params`, `set_params`, `fit`, `transform`, `fit_transform`, `get_feature_names_out`, and `set_output`. `FeatureSpec` is an operation description rather than an estimator. `fit` returns the transformer, while transformation returns a Polars frame by default or a pandas DataFrame when requested. Calling `transform` before fitting raises `NotFittedError`.
+All six transformers expose `get_params`, `set_params`, `fit`, `transform`, `fit_transform`, `get_feature_names_out`, and `set_output`. `FeatureSpec` is an operation description rather than an estimator. `fit` returns the transformer, while transformation returns a Polars frame by default or a pandas DataFrame when requested. Calling `transform` before fitting raises `NotFittedError`.
 
 Scikit-learn cloning copies constructor configuration and explicit output settings, then discards learned state. Use complete pipelines in cross-validation so each fold fits its own training-dependent preprocessing. Keep the target out of the feature frame. `set_params` changes configuration without immediately validating it or clearing learned state; refit after changing the contract. A failed refit may leave earlier fitted state available, so use a fresh instance when old state must be discarded.
 

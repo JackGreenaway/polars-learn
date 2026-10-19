@@ -13,6 +13,7 @@ from polars_learn import (
     FeaturePassthrough,
     FeatureSpec,
     SchemaValidator,
+    ValueValidator,
 )
 
 
@@ -76,6 +77,7 @@ def test_real_pipeline(frame):
         FeatureEngineer([]),
         FeatureEngineer({"expression": pl.col("price")}),
         SchemaValidator(),
+        ValueValidator({"price_positive": pl.col("price") > 0}),
     ],
 )
 def test_output_protocol(frame, estimator):
@@ -96,6 +98,7 @@ def test_output_protocol(frame, estimator):
         FeatureEngineer([]),
         FeatureEngineer({"expression": pl.col("price")}),
         SchemaValidator(),
+        ValueValidator({"price_positive": pl.col("price") > 0}),
     ],
 )
 def test_relevant_estimator_checks(estimator):

@@ -16,6 +16,7 @@ CLASSES = {
     "FeatureSpec": "feature-spec",
     "SchemaSpec": "schema-spec",
     "SchemaValidator": "schema-validator",
+    "ValueValidator": "value-validator",
     "ColumnSelector": "column-selector",
     "FeaturePassthrough": "feature-passthrough",
 }
@@ -320,7 +321,7 @@ def main():
     if not args.check:
         api_path.write_text(api)
     print(
-        "All 12 public objects are covered; "
+        f"All {len(polars_learn.__all__)} public objects are covered; "
         "references match source signatures and docstrings."
     )
 

@@ -39,7 +39,7 @@ assert pipeline[:-1].get_feature_names_out().tolist() == [
 Predictions returned: 2
 ```
 
-The schema step preserves lazy input. The feature step requests eager output, so its returned result is collected before reaching the model. Eager fitting and fit_transform behavior can still evaluate preparation more than once; this is not a promise of a single source scan. Keep source access and execution errors within your request's error handling. See [lazy execution](../user-guide/frames.md).
+The schema step preserves lazy input. The feature step requests eager output, so its returned result is collected before reaching the model. Feature fitting resolves schema metadata; feature execution happens once when the eager transform collects the plan. Other pipeline steps may establish their own execution boundaries. Keep source access and execution errors within your request's error handling. See [lazy execution](../user-guide/frames.md).
 
 
 ## Interpretation and next steps

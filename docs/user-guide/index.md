@@ -4,6 +4,8 @@ Start with [estimators and pipelines](estimators.md), then choose components for
 [feature engineering](features.md), [schema contracts](schemas.md), and
 [selection](selection.md). Learn about [frame boundaries](frames.md),
 [persistence](persistence.md), and [diagnostics](diagnostics.md).
+Use [value validation](value-validation.md) for row-level null, range, and
+allowed-value checks.
 
 ## Workflows
 

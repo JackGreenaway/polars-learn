@@ -19,6 +19,7 @@ from polars_learn import (
     InconsistentVersionWarning,
     SchemaSpec,
     SchemaValidator,
+    ValueValidator,
 )
 
 
@@ -47,10 +48,15 @@ def main():
             "passthrough": FeaturePassthrough(["price"]),
             "contract": SchemaSpec(dict(frame.schema)),
             "validator": SchemaValidator(),
+            "values": ValueValidator({"positive_price": pl.col("price") > 0}),
             "callback": FeatureEngineer(configured_callback()),
             "pipeline": Pipeline(
                 [
                     ("schema", SchemaValidator()),
+                    (
+                        "values",
+                        ValueValidator({"positive_price": pl.col("price") > 0}),
+                    ),
                     (
                         "features",
                         FeatureEngineer(
@@ -100,7 +106,7 @@ def main():
         print(
             "Loaded with Polars",
             pl.__version__,
-            "; all 8 objects match; version warnings:",
+            "; all 9 objects match; version warnings:",
             len(version_warnings),
         )
 

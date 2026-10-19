@@ -97,15 +97,15 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
     directly from existing input columns in one specification.
     The public API accepts DataFrames and LazyFrames. Lazy inputs are checked
     using schema metadata and return unevaluated plans by default. Eager input
-    executes the training transformation; lazy fit validates its schema only.
+    fit resolves the complete output schema from metadata without evaluating rows.
     Value-dependent errors in lazy plans surface when collected.
     Transform requires fitted input names and order and the fitted output schema.
     Default output preserves input kind. set_output(transform="polars")
     collects a DataFrame; "polars-lazy" returns a LazyFrame, which may wrap an
     evaluated result for eager input. "pandas" converts an eager result for
     compatibility. Prefer native Polars output to avoid conversion overhead.
-    Fit always returns self. fit_transform
-    calls fit then transform and evaluates eager feature expressions twice.
+    Fit always returns self. fit_transform calls fit then transform, so feature
+    expressions execute once during transform.
     Pickling retains input definitions, fitted schemas, and output settings.
     Expressions use Polars' native persistence, with cloudpickle for embedded
     Python callbacks. Version mismatches warn before state restoration, then
@@ -217,6 +217,32 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
                 f"Failed to execute feature plan ({'; '.join(labels)}): {exc}"
             ) from exc
 
+    def _output_schema(self, frame: Frame, specs: tuple[FeatureSpec, ...]) -> Schema:
+        """Resolve feature plan schemas without evaluating input rows."""
+        plan = frame.lazy() if isinstance(frame, pl.DataFrame) else frame
+        labels: list[str] = []
+        for index, spec in enumerate(specs):
+            label = spec.name or f"specification {index}: {spec!r}"
+            labels.append(label)
+            try:
+                plan = plan.with_columns(spec.expression)
+                schema = plan.collect_schema()
+                missing = set(spec.drop) - set(schema.names())
+                if missing:
+                    raise ValueError(f"Cannot drop missing columns: {sorted(missing)}")
+                if spec.drop:
+                    plan = plan.drop(spec.drop)
+            except Exception as exc:
+                raise FeatureEngineeringError(
+                    f"Failed to generate {label}: {exc}"
+                ) from exc
+        try:
+            return dict(plan.collect_schema())
+        except Exception as exc:
+            raise FeatureEngineeringError(
+                f"Failed to resolve feature plan ({'; '.join(labels)}): {exc}"
+            ) from exc
+
     def _collect(self, result: pl.LazyFrame) -> pl.DataFrame:
         try:
             return result.collect()
@@ -229,10 +255,10 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         """Validate training expressions and learn input and output schemas.
 
         Call on raw training data to establish the expected input and feature layout.
-        Builds the ordered feature plan and records input names/order and resulting
-        output names/dtypes. Eager input executes the plan; lazy input checks schema
-        metadata without evaluating rows. Expressions are not converted into learned
-        statistics. Returns the fitted transformer, not the engineered frame.
+        Resolves the ordered feature plan from schema metadata and records input
+        names/order and resulting output names/dtypes. It does not evaluate rows or
+        mutate the input. Expressions are not converted into learned statistics.
+        Returns the fitted transformer, not the engineered frame.
 
         Parameters
         ----------
@@ -260,12 +286,12 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         """
         frame, specs = self._input(X)
         input_schema = frame_schema(frame)
-        result = self._execute(frame, specs)
+        output_schema = self._output_schema(frame, specs)
         self.feature_names_in_ = np.asarray(list(input_schema), dtype=object)
         self.n_features_in_ = len(input_schema)
         self.input_schema_: Schema = input_schema
-        self.output_schema_: Schema = frame_schema(result)
-        self.output_features_ = np.asarray(list(frame_schema(result)), dtype=object)
+        self.output_schema_: Schema = output_schema
+        self.output_features_ = np.asarray(list(output_schema), dtype=object)
         self._report(f"Fit complete; output columns: {self.output_features_.tolist()}")
         return self
 
@@ -279,8 +305,8 @@ class FeatureEngineer(NativeTransformer, auto_wrap_output_keys=None):
         returns the prepared frame. The target is ignored and extra fit parameters
         are unsupported. See ``fit`` for the class-specific learned contract and
         ``transform`` for validation and output behavior.
-        Eager feature expressions run twice because fit and transform each execute
-        the feature plan. Lazy input remains a plan unless eager output is requested.
+        Feature expressions execute once during transform. Lazy input remains a
+        plan unless eager output is requested.
 
         Output follows ``set_output``: native Polars by default, eager Polars for
         ``"polars"``, a LazyFrame for ``"polars-lazy"``, or a pandas DataFrame for

@@ -13,6 +13,8 @@ from polars_learn import (
     SchemaSpec,
     SchemaValidationError,
     SchemaValidator,
+    ValueValidationError,
+    ValueValidator,
 )
 
 FACTORIES = [
@@ -28,6 +30,10 @@ FACTORIES = [
     lambda **kw: SchemaSpec({"x": pl.Int64, "y": pl.String}, **kw),
     lambda **kw: SchemaValidator(**kw),
 ]
+
+
+def value_validator(**kwargs):
+    return ValueValidator({"positive_x": pl.col("x") > 0}, **kwargs)
 
 
 @pytest.mark.parametrize("factory", FACTORIES)
@@ -99,6 +105,17 @@ def test_cross_kind_fit_transform(lazy_fit):
         estimator = factory().fit(frame.lazy() if lazy_fit else frame)
         assert isinstance(estimator.transform(frame), pl.DataFrame)
         assert isinstance(estimator.transform(frame.lazy()), pl.LazyFrame)
+
+
+@pytest.mark.parametrize("output", ["default", "polars", "polars-lazy"])
+def test_value_validator_checks_lazy_values_before_return_and_preserves_output(output):
+    valid = pl.DataFrame({"x": [1, 2]})
+    validator = value_validator().set_output(transform=output)
+    result = validator.fit_transform(valid.lazy())
+    lazy_output = output in ("default", "polars-lazy")
+    assert isinstance(result, pl.LazyFrame if lazy_output else pl.DataFrame)
+    with pytest.raises(ValueValidationError, match="positive_x"):
+        validator.transform(pl.DataFrame({"x": [1, -1]}).lazy())
 
 
 def test_lazy_schema_errors_fail_before_collect():

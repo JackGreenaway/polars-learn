@@ -74,15 +74,15 @@ specifications to reference newly created columns, or compose expressions
 directly from existing input columns in one specification.
 The public API accepts DataFrames and LazyFrames. Lazy inputs are checked
 using schema metadata and return unevaluated plans by default. Eager input
-executes the training transformation; lazy fit validates its schema only.
+fit resolves the complete output schema from metadata without evaluating rows.
 Value-dependent errors in lazy plans surface when collected.
 Transform requires fitted input names and order and the fitted output schema.
 Default output preserves input kind. set_output(transform="polars")
 collects a DataFrame; "polars-lazy" returns a LazyFrame, which may wrap an
 evaluated result for eager input. "pandas" converts an eager result for
 compatibility. Prefer native Polars output to avoid conversion overhead.
-Fit always returns self. fit_transform
-calls fit then transform and evaluates eager feature expressions twice.
+Fit always returns self. fit_transform calls fit then transform, so feature
+expressions execute once during transform.
 Pickling retains input definitions, fitted schemas, and output settings.
 Expressions use Polars' native persistence, with cloudpickle for embedded
 Python callbacks. Version mismatches warn before state restoration, then
@@ -128,15 +128,15 @@ Load trusted artifacts only and validate features after upgrading.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L228">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L254">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit</span>(X, y=None)</code></pre></div>
 
 Validate training expressions and learn input and output schemas.
 
 Call on raw training data to establish the expected input and feature layout.
-Builds the ordered feature plan and records input names/order and resulting
-output names/dtypes. Eager input executes the plan; lazy input checks schema
-metadata without evaluating rows. Expressions are not converted into learned
-statistics. Returns the fitted transformer, not the engineered frame.
+Resolves the ordered feature plan from schema metadata and records input
+names/order and resulting output names/dtypes. It does not evaluate rows or
+mutate the input. Expressions are not converted into learned statistics.
+Returns the fitted transformer, not the engineered frame.
 
 #### Parameters
 
@@ -165,7 +165,7 @@ statistics. Returns the fitted transformer, not the engineered frame.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L320">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L346">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">transform</span>(X)</code></pre></div>
 
 Generate features and verify the fitted output schema.
 
@@ -217,7 +217,7 @@ FeatureEngineeringError, preserving their causes.
 
 <div class="api-method-body" markdown="1">
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L272">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/feature_engineering.py#L298">[source]</a><pre><code><span class="api-keyword"></span><span class="api-module"></span><span class="api-name">fit_transform</span>(
     X,
     y=None,
     **fit_params,
@@ -230,8 +230,8 @@ then `transform(X)` on the same input. This updates fitted state and
 returns the prepared frame. The target is ignored and extra fit parameters
 are unsupported. See `fit` for the class-specific learned contract and
 `transform` for validation and output behavior.
-Eager feature expressions run twice because fit and transform each execute
-the feature plan. Lazy input remains a plan unless eager output is requested.
+Feature expressions execute once during transform. Lazy input remains a
+plan unless eager output is requested.
 
 Output follows `set_output`: native Polars by default, eager Polars for
 `"polars"`, a LazyFrame for `"polars-lazy"`, or a pandas DataFrame for

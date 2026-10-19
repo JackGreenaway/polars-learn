@@ -9,7 +9,7 @@
 The power comes from the **Polars API**: compose expressions, use selectors, build dependent features in entry order, and choose eager or lazy execution. The package gives those transformations a reusable estimator interface and fitted schema checks.
 
 - **Keep training and serving together:** save the fitted pipeline with its feature definitions and model, then predict from raw observations.
-- **Catch structural drift before prediction:** check required columns and dtypes, control permitted casts, and make the model's feature layout explicit.
+- **Catch invalid input before prediction:** check required columns and dtypes, enforce row-level value rules, control permitted casts, and make the model's feature layout explicit.
 - **Express your actual feature logic:** use native Polars operations or package custom Python callbacks when needed.
 
 <div class="docs-actions" markdown="1">
@@ -38,6 +38,21 @@ Use this package when you want Polars-based preparation to be part of the model 
 
 See [the complete pipeline workflow](user-guide/pipeline-workflow.md) for training and serving examples.
 
+<figure class="pipeline-figure" aria-labelledby="pipeline-flow-caption">
+  <div class="pipeline-flow" role="img" aria-label="Raw Polars input passes through schema validation, feature engineering, and column selection before the fitted estimator predicts.">
+    <div class="pipeline-step"><span>Input</span><code>raw Polars frame</code></div>
+    <span class="pipeline-arrow" aria-hidden="true">→</span>
+    <div class="pipeline-step"><span>Validate</span><code>SchemaValidator</code></div>
+    <span class="pipeline-arrow" aria-hidden="true">→</span>
+    <div class="pipeline-step"><span>Prepare</span><code>FeatureEngineer</code></div>
+    <span class="pipeline-arrow" aria-hidden="true">→</span>
+    <div class="pipeline-step"><span>Select</span><code>ColumnSelector</code></div>
+    <span class="pipeline-arrow" aria-hidden="true">→</span>
+    <div class="pipeline-step"><span>Predict</span><code>fitted estimator</code></div>
+  </div>
+  <figcaption id="pipeline-flow-caption">At prediction time, raw input passes through the fitted preparation steps before reaching the estimator. Training fits these steps on training data as part of the same pipeline.</figcaption>
+</figure>
+
 ## Explore the documentation
 
 <div class="docs-topics" markdown="1">
@@ -54,13 +69,13 @@ Build model features from ordered Polars expressions.
 </div>
 <div class="docs-topic" markdown="1">
 
-### Schema validation
+### Input validation
 
-Declare input contracts or learn a schema during training.
+Declare structural contracts, learn a training schema, and check row values.
 
-**Components:** [SchemaSpec](classes/schema-spec.md), [SchemaValidator](classes/schema-validator.md).
+**Components:** [SchemaSpec](classes/schema-spec.md), [SchemaValidator](classes/schema-validator.md), [ValueValidator](classes/value-validator.md).
 
-[Schema contracts guide](user-guide/schemas.md)
+[Schema contracts guide](user-guide/schemas.md) · [Value rules guide](user-guide/value-validation.md)
 
 </div>
 <div class="docs-topic" markdown="1">

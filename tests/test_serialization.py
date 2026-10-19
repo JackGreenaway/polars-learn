@@ -30,6 +30,8 @@ from polars_learn import (
     SchemaSpec,
     SchemaValidationError,
     SchemaValidator,
+    ValueValidationError,
+    ValueValidator,
 )
 
 PROTOCOLS = range(pickle.HIGHEST_PROTOCOL + 1)
@@ -38,6 +40,12 @@ TRANSFORMERS = [
     lambda: FeaturePassthrough(["quantity", "price"]),
     lambda: SchemaSpec({"price": pl.Float64, "quantity": pl.Int64}),
     lambda: SchemaValidator(mode="permissive"),
+    lambda: ValueValidator(
+        {
+            "positive_price": pl.col("price") > 0,
+            "quantity_present": pl.col("quantity").is_not_null(),
+        }
+    ),
     lambda: FeatureEngineer(
         [
             FeatureSpec(pl.col("price") * pl.col("quantity"), alias="notional"),
@@ -258,6 +266,7 @@ assert not hasattr(clone(restored)["features"], "output_schema_")
         SchemaValidationError,
         FeatureEngineeringError,
         PandasConversionWarning,
+        ValueValidationError,
     ],
 )
 def test_public_errors_and_warning_pickle(error_type):

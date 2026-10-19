@@ -1,6 +1,6 @@
 # Lazy execution and interoperability
 
-All five transformers accept a `pl.LazyFrame`, including a query from `pl.scan_csv(...)`. Default output follows the input to **each call**, independently of whether fitting used eager or lazy input. Pandas input, when conversion is allowed, is treated as an eager DataFrame.
+All six transformers accept a `pl.LazyFrame`, including a query from `pl.scan_csv(...)`. Default output follows the input to **each call**, independently of whether fitting used eager or lazy input. Pandas input, when conversion is allowed, is treated as an eager DataFrame. `ValueValidator` is the exception to deferred execution: it materializes lazy input to check values, then returns an in-memory LazyFrame by default.
 
 | `set_output(transform=...)`    | DataFrame input          | LazyFrame input                |
 | ------------------------------ | ------------------------ | ------------------------------ |
@@ -36,7 +36,7 @@ engineer.set_output(transform="default")
 
 Output settings control `transform` and `fit_transform` returns. `fit` always returns the transformer and does not collect lazy rows just because eager output is configured. Forcing a lazy return from eager input can wrap an already computed result; pass lazy input to keep row evaluation deferred throughout.
 
-Lazy operations check column names, order, dtypes, expression dependencies, and drops using schema metadata. Resolving metadata can access a source's metadata; it does not collect all its rows. Lazy fit validates the plan schema, not every input value. Value-dependent errors surface at collection. A returned LazyFrame is a query plan: collecting it again may execute the query again.
+Lazy operations check column names, order, dtypes, expression dependencies, and drops using schema metadata. Resolving metadata can access a source's metadata; it does not collect all its rows. Fits validate schemas, not input values. `ValueValidator` resolves check schemas during fit, then materializes and checks the batch during transform; its default LazyFrame output wraps the checked in-memory data, so later collection does not rerun the source. A returned LazyFrame from other transformers is a query plan: collecting it again may execute the query again.
 
 Inspect lazy output with `plan.collect_schema()` for names and dtypes, and `plan.collect()` for data. Verbosity reports lazy row counts as unknown rather than evaluating rows to count them.
 
@@ -65,11 +65,11 @@ result = validator.fit_transform(X)
 assert result.columns == ["price", "quantity"]
 ```
 
-All five transformers expose `convert_pandas` and `warn_on_conversion`. Conversion is disabled by default. When enabled, it emits `PandasConversionWarning` unless `warn_on_conversion=False`. Use Polars directly to avoid conversion overhead; `fit_transform` may convert input more than once. Pandas and PyArrow are imported only when needed. The extra includes PyArrow for nullable, extension, and other dtypes that require it. Conversion follows Polars conventions, including NaN to null conversion and ignoring the pandas index. Unsupported dtypes raise; conversion does not fall back to row operations. An explicit `"polars-lazy"` output choice returns a lazy wrapper after conversion.
+All six transformers expose `convert_pandas` and `warn_on_conversion`. Conversion is disabled by default. When enabled, it emits `PandasConversionWarning` unless `warn_on_conversion=False`. Use Polars directly to avoid conversion overhead; `fit_transform` may convert input more than once. Pandas and PyArrow are imported only when needed. The extra includes PyArrow for nullable, extension, and other dtypes that require it. Conversion follows Polars conventions, including NaN to null conversion and ignoring the pandas index. Unsupported dtypes raise; conversion does not fall back to row operations. An explicit `"polars-lazy"` output choice returns a lazy wrapper after conversion.
 
 ## Pandas output for compatibility
 
-Prefer native Polars input and output for speed: it keeps preparation in Polars and avoids conversion overhead. Use `set_output(transform="pandas")` when an existing consumer needs a pandas DataFrame. All five transformers support this option on `transform` and `fit_transform`; feature calculations and schema checks still happen in Polars.
+Prefer native Polars input and output for speed: it keeps preparation in Polars and avoids conversion overhead. Use `set_output(transform="pandas")` when an existing consumer needs a pandas DataFrame. All six transformers support this option on `transform` and `fit_transform`; feature calculations and schema checks still happen in Polars.
 
 Install `polars-learn[pandas]` using the commands in [Optional pandas input](#optional-pandas-input). Pandas output requires pandas and PyArrow. You do not need `convert_pandas=True` when your input is already Polars; that flag controls pandas **input** independently.
 

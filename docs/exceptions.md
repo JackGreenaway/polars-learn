@@ -33,7 +33,7 @@ UserWarning, not a PolarsLearnError.
 
 ## polars_learn.InconsistentVersionWarning
 
-<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/exceptions.py#L50">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">InconsistentVersionWarning</span>(
+<div class="api-signature"><a class="api-source" href="https://github.com/JackGreenaway/polars-learn/blob/main/src/polars_learn/exceptions.py#L54">[source]</a><pre><code><span class="api-keyword">class </span><span class="api-module">polars_learn.</span><span class="api-name">InconsistentVersionWarning</span>(
     class_name,
     dependency,
     original_version,
@@ -56,3 +56,7 @@ including incompatible state after a dependency change. The original
 exception is retained as the cause so callers can inspect the failure.
 Catch this when reporting artifact loading/saving errors; a version
 mismatch alone emits InconsistentVersionWarning rather than this error.
+
+## polars_learn.ValueValidationError
+
+Raised when a named row-level value check fails or cannot run.

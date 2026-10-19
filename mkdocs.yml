@@ -34,11 +34,13 @@ nav:
       - Feature Spec Details: user-guide/feature-spec-details.md
       - Schema Spec Details: user-guide/schema-spec-details.md
       - Schema Validator Details: user-guide/schema-validator-details.md
+      - Value validation: user-guide/value-validation.md
   - API classes:
       - FeatureEngineer: classes/feature-engineer.md
       - FeatureSpec: classes/feature-spec.md
       - SchemaSpec: classes/schema-spec.md
       - SchemaValidator: classes/schema-validator.md
+      - ValueValidator: classes/value-validator.md
       - ColumnSelector: classes/column-selector.md
       - FeaturePassthrough: classes/feature-passthrough.md
   - Examples:

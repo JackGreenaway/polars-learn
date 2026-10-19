@@ -2,7 +2,7 @@
 
 ## LazyFrames and Return Types
 
-All five transformers accept a `pl.LazyFrame`, including a query from `pl.scan_csv(...)`. Default output follows the input to **each call**, independently of whether fitting used eager or lazy input. Pandas input, when conversion is allowed, is treated as an eager DataFrame.
+All six transformers accept a `pl.LazyFrame`, including a query from `pl.scan_csv(...)`. Default output follows the input to **each call**, independently of whether fitting used eager or lazy input. `ValueValidator` materializes lazy input to check values and returns an in-memory lazy frame by default. Pandas input, when conversion is allowed, is treated as an eager DataFrame.
 
 | `set_output(transform=...)`    | DataFrame input          | LazyFrame input                |
 | ------------------------------ | ------------------------ | ------------------------------ |
@@ -153,7 +153,7 @@ assert restored[:-1].get_feature_names_out().tolist() == [
 
 Saved objects record their creating versions of Python, `polars-learn`, Polars, scikit-learn, NumPy, and cloudpickle. Loading under a different version emits `polars_learn.InconsistentVersionWarning` for each changed dependency before restoring that object's state, then attempts loading. The warning exposes `class_name`, `dependency`, `original_version`, and `current_version`. Older artifacts without version metadata cannot report their creating environment.
 
-Same-version expression loading uses Polars binary serialization to preserve native values, including NaN and infinity. Cross-version expression loading tries Polars' JSON representation, provided the expression operations, dtypes, callbacks, and other required objects are available and compatible in the receiving environment. If that representation is unavailable or rejected, loading raises `SerializationError` with version context and the original exception as its cause; it does not fall back to the old binary layout. CI verifies both directions between Polars 1.35.2 and the locked version, currently 1.44.2, for all six main classes and a fitted prediction pipeline.
+Same-version expression loading uses Polars binary serialization to preserve native values, including NaN and infinity. Cross-version expression loading tries Polars' JSON representation, provided the expression operations, dtypes, callbacks, and other required objects are available and compatible in the receiving environment. If that representation is unavailable or rejected, loading raises `SerializationError` with version context and the original exception as its cause; it does not fall back to the old binary layout. CI verifies both directions between Polars 1.35.2 and the locked version for all seven main classes and a fitted prediction pipeline.
 
 To reject a version mismatch before restoring state, promote the warning to an error:
 
@@ -193,7 +193,7 @@ To silence this category application-wide, call `warnings.filterwarnings("ignore
 
 ## Verbosity
 
-All six classes accept an integer `verbosity`:
+All seven public classes accept an integer `verbosity`:
 
 | Level         | Output to standard output                                                          |
 | ------------- | ---------------------------------------------------------------------------------- |
@@ -229,7 +229,8 @@ validated = validator.fit_transform(X)
 | `SchemaSpec` contract or fitted output-name mismatch                                    | `ValueError`                        | Fit/transform schema check                  |
 | `ColumnSelector`/`FeaturePassthrough` missing columns or fitted output-name mismatch    | `ValueError`                        | Fit/transform schema check                  |
 | `SchemaValidator` missing columns, disallowed extras/order/types, or eager cast failure | `SchemaValidationError`             | Transform                                   |
-| Feature dependency, drop, or schema failure; eager feature execution failure            | `FeatureEngineeringError`           | Fit/transform                               |
+| Feature dependency, drop, or schema failure                                             | `FeatureEngineeringError`           | Fit/transform schema check                   |
+| Eager feature execution failure                                                         | `FeatureEngineeringError`           | Transform/fit_transform                      |
 | Value-dependent feature failure or permissive cast failure in a returned lazy plan      | Native Polars exception             | `collect()` or another execution operation  |
 | Lossy semi-strict integer to Float64 cast in a lazy plan                                | `SchemaValidationError`             | Lazy execution                              |
 | Enabled pandas conversion with warnings enabled                                         | `PandasConversionWarning`           | Conversion, even at verbosity 0             |
@@ -253,7 +254,7 @@ result = validator.fit_transform(X)
 assert result.columns == ["price", "quantity"]
 ```
 
-All five transformers expose `convert_pandas` and `warn_on_conversion`. Conversion is disabled by default. When enabled, it emits `PandasConversionWarning` unless `warn_on_conversion=False`. Use Polars directly to avoid conversion overhead; `fit_transform` may convert input more than once. Pandas and PyArrow are imported only when needed. The extra includes PyArrow for nullable, extension, and other dtypes that require it. Conversion follows Polars conventions, including NaN to null conversion and ignoring the pandas index. Unsupported dtypes raise; conversion does not fall back to row operations. An explicit `"polars-lazy"` output choice returns a lazy wrapper after conversion.
+All six transformers expose `convert_pandas` and `warn_on_conversion`. Conversion is disabled by default. When enabled, it emits `PandasConversionWarning` unless `warn_on_conversion=False`. Use Polars directly to avoid conversion overhead; `fit_transform` may convert input more than once. Pandas and PyArrow are imported only when needed. The extra includes PyArrow for nullable, extension, and other dtypes that require it. Conversion follows Polars conventions, including NaN to null conversion and ignoring the pandas index. Unsupported dtypes raise; conversion does not fall back to row operations. An explicit `"polars-lazy"` output choice returns a lazy wrapper after conversion.
 
 ## Development
 
