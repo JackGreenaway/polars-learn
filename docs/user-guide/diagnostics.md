@@ -40,7 +40,7 @@ validated = validator.fit_transform(X)
 | Feature dependency, drop, or schema failure                                         | `FeatureEngineeringError`           | Fit/transform schema check                   |
 | Eager feature execution failure                                                      | `FeatureEngineeringError`           | Transform/fit_transform                      |
 | Value-dependent feature failure or permissive cast failure in a returned lazy plan      | Native Polars exception             | `collect()` or another execution operation  |
-| Lossy semi-strict integer to Float64 cast in a lazy plan                                | `SchemaValidationError`             | Lazy execution                              |
+| Lossy semi-strict integer to Float64 cast in a lazy plan                                | `SchemaValidationError` (may be wrapped in Polars `ComputeError` on older Polars versions) | Lazy execution |
 | Enabled pandas conversion with warnings enabled                                         | `PandasConversionWarning`           | Conversion, even at verbosity 0             |
 
 `PolarsLearnError` is the base of `SchemaValidationError`, `ValueValidationError`, and `FeatureEngineeringError`. Plain `TypeError`/`ValueError`, `NotFittedError`, and native Polars errors do not inherit from it. Input query and source failures can also propagate as native Polars or source exceptions during schema resolution or collection. Wrapped errors preserve their original exception as `__cause__`.

@@ -35,6 +35,18 @@ from polars_learn import (
 )
 
 PROTOCOLS = range(pickle.HIGHEST_PROTOCOL + 1)
+
+
+def _supports_expression_serialization(expression: pl.Expr) -> bool:
+    try:
+        expression.meta.serialize(format="binary")
+    except pl.exceptions.PanicException:
+        return False
+    except Exception:
+        return False
+    return True
+
+
 TRANSFORMERS = [
     lambda: ColumnSelector(["quantity", "price"], rename={"quantity": "qty"}),
     lambda: FeaturePassthrough(["quantity", "price"]),
@@ -105,7 +117,15 @@ def test_transformer_pickle_round_trip(frame, factory, fitted, fit_lazy, protoco
         FeatureSpec(
             expression=[pl.col("price") + 1, pl.col("quantity") * 2], drop=["quantity"]
         ),
-        FeatureSpec(pl.all().name.suffix("_copy")),
+        pytest.param(
+            FeatureSpec(pl.all().name.suffix("_copy")),
+            marks=pytest.mark.skipif(
+                not _supports_expression_serialization(
+                    FeatureSpec(pl.all().name.suffix("_copy")).expression[0]
+                ),
+                reason="This Polars version cannot serialize selector renaming plans.",
+            ),
+        ),
         FeatureSpec(
             pl.when(pl.col("price") > 2).then(pl.lit("high")).otherwise(pl.lit("low")),
             alias="band",

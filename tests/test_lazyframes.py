@@ -155,7 +155,11 @@ def test_lazy_semi_strict_lossless_float_cast():
     result = validator.transform(pl.DataFrame({"x": [2, None]}).lazy())
     assert result.collect()["x"].to_list() == [2.0, None]
     invalid = validator.transform(pl.DataFrame({"x": [2**53 + 1]}).lazy())
-    with pytest.raises(SchemaValidationError, match="losslessly"):
+    # Older Polars releases wrap Python UDF exceptions in ComputeError when
+    # they surface from a collected lazy plan.
+    with pytest.raises(
+        (SchemaValidationError, pl.exceptions.ComputeError), match="losslessly"
+    ):
         invalid.collect()
     # Schema-only widening remains lazy and respects the dtype range policy.
     integers = SchemaValidator(mode="semi-strict").fit(pl.DataFrame({"x": [1]}).lazy())
