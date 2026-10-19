@@ -1,8 +1,8 @@
 # Preparing raw data in a pipeline
 
-## Why pipeline scaling but leave feature generation outside?
+## Why put feature preparation in the model pipeline?
 
-**If we put standard scaling and polynomial features inside a fitted pipeline, why not put full feature generation there too?** Scaling and polynomial expansion are feature preparation. So are calculating transaction value, deriving a spread, extracting calendar features, and selecting model inputs. Keeping the complete preparation path with the estimator gives training and deployment the same entry point: raw observations in, predictions out.
+**If we put standard scaling and polynomial features inside a fitted pipeline, why leave the feature definitions that govern the model somewhere else?** Scaling and polynomial expansion are feature preparation. So are calculating transaction value, deriving a spread, extracting calendar features, validating required inputs, and selecting model columns. When Python owns inference and these steps can run at prediction time, keeping them with the estimator gives training and deployment one entry point: raw observations in, predictions out. The fitted object then describes not just which estimator predicts, but which data contract and feature meaning that estimator depends on.
 
 ### A separate feature function leaves callers responsible
 
@@ -30,9 +30,13 @@ predictions = model.predict(prepare_features(raw_predict))
 assert np.allclose(predictions, [3.0])
 ```
 
-This works when every caller applies the correct function. The risk is that preparation and the saved estimator are managed separately. Saving only `model` leaves the feature calculation outside that artifact. A deployment might omit the function, use an older definition, or select different columns. Calling `model.predict(raw_predict)` would supply `quantity` where the model expects `notional`; depending on the receiving estimator's checks, a mismatch can fail or produce incorrect predictions. A changed calculation can also keep the same names and dtypes while changing the feature's meaning.
+This works when every caller applies the correct function. The risk is that preparation and the saved estimator are managed separately. Saving only `model` leaves the feature calculation outside that artifact. A deployment might omit the function, use an older definition, or select different columns. Calling `model.predict(raw_predict)` would supply `quantity` where the model expects `notional`; depending on the receiving estimator's checks, a mismatch can fail or produce incorrect predictions. A changed calculation can also keep the same names and dtypes while changing the feature's meaning. This separation makes a model release depend on coordinating another code release, matching versions, and verifying the combined behavior; a passing model-only test cannot establish that raw production records still become the intended features.
 
-Cross-validation has the same boundary: it can only fit the steps included in the object being evaluated. This example's arithmetic is deterministic, but preprocessing that learns statistics must be fitted within each training fold. Separate preparation code needs its own versioning, testing, and explicit handling of those learned quantities.
+Moving `prepare_features` into Kafka Streams, Spark, or another upstream service can be a sound architecture, but it does not remove the model's need for correctly prepared input: the model still has to produce the prediction. It creates a separately deployed boundary, so the model artifact may not record which raw schema, transformations, or value rules produced its columns. That adds version coordination and another place for failures, stale features, and training-serving mismatch to arise. It can also make cross-validation harder: learned preprocessing must be fitted inside each training fold, and an external process must preserve that fold-specific behavior rather than leak information from validation rows. For deterministic per-row work, benchmark the complete prediction path before adding a Kafka or Spark stage solely for presumed speed; Polars is built for columnar transformation, and an extra service boundary has its own latency and operational cost.
+
+External preparation is a good fit when the architecture needs streaming or stateful windows, a shared feature producer serving multiple consumers, centralized data ownership, or measured throughput that justifies the extra boundary. In that design, treat the prepared feature schema and semantics as a versioned API: validate it at the model boundary, test raw-record-to-prediction behavior end to end, and roll out compatible producer and model versions. Do not duplicate feature definitions in both places. If the organization already has a canonical feature service or store, let the model consume that contract explicitly and keep its version and tests tied to the model release.
+
+Cross-validation has the same boundary: it can only fit the steps included in the object being evaluated. This example's arithmetic is deterministic, but preprocessing that learns statistics must be fitted within each training fold. Keeping learned preparation in the estimator pipeline lets scikit-learn clone and fit it per fold; separate preparation code needs its own versioning, testing, and explicit handling of those learned quantities.
 
 ### Put the feature definitions alongside the estimator
 
@@ -72,9 +76,13 @@ assert np.allclose(predictions, [3.0])
 assert pipeline[:-1].get_feature_names_out().tolist() == ["price", "notional"]
 ```
 
-`fit` applies the declared preparation and fits the scaler and regressor. `predict` validates the raw input, recreates `notional`, selects the fitted model layout, and applies the fitted scaler before predicting. Save the **whole fitted pipeline** to carry its feature definitions and fitted components into deployment. See [saving and loading](persistence.md) and [cross-validation](../examples/cross-validation.md).
+During fitting, scikit-learn calls the pipeline's preparation steps to create model inputs and fits the scaler and regressor; estimator `fit` methods do not mutate the caller's input frame. At prediction time, `predict` validates the raw input, recreates `notional`, selects the fitted model layout, and applies the fitted scaler before predicting. Save the **whole fitted pipeline** to carry its feature definitions and fitted components into deployment. See [saving and loading](persistence.md) and [cross-validation](../examples/cross-validation.md).
 
 The benefit is a shared, inspectable preparation path. Schema checks detect structural mismatches; they do not prove that values have the right business meaning or automatically prevent leakage. Polars expressions do not learn and freeze statistics. Keep learned preprocessing such as scaling, imputation, or training-derived aggregates in appropriate fitted components, and validate the pipeline before deployment.
+
+### Use model predictions as features
+
+Feature pipelines can include learned model signals as well as deterministic Polars expressions. For example, `StackingRegressor` or `StackingClassifier` can combine base estimators whose individual scikit-learn pipelines each validate raw inputs, engineer features, and fit a model; a final estimator then learns from the base models' predictions. During fitting, stacking trains the final estimator on cross-validated base-model predictions, then refits the base estimators on the full training data for inference. This keeps the feature preparation and model-generated signals in one composite estimator, while avoiding training the final estimator on in-sample base predictions. Use a stacking estimator for this pattern; a plain `Pipeline` requires every intermediate step to implement `transform`, so a bare predictor cannot be inserted as a feature step. Check that each chosen estimator accepts the Polars container and dtypes it receives. See scikit-learn's [stacking guide](https://scikit-learn.org/stable/modules/ensemble.html#stacking) and [`StackingRegressor` reference](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.StackingRegressor.html).
 
 ### How each class addresses a concrete risk
 

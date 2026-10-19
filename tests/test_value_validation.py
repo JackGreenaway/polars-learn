@@ -130,17 +130,22 @@ def test_null_check_results_are_violations():
         validator.fit_transform(incoming)
 
 
-def test_eager_output_materializes_a_lazy_source_once(monkeypatch):
-    frame = pl.DataFrame({"price": [1.0], "quantity": [2]}).lazy()
-    real_collect = pl.LazyFrame.collect
+def test_eager_output_materializes_a_lazy_source_once():
     calls = 0
 
-    def count_collect(self, *args, **kwargs):
+    def count_source(frame):
         nonlocal calls
         calls += 1
-        return real_collect(self, *args, **kwargs)
+        return frame
 
-    monkeypatch.setattr(pl.LazyFrame, "collect", count_collect)
+    frame = (
+        pl.DataFrame({"price": [1.0], "quantity": [2]})
+        .lazy()
+        .map_batches(
+            count_source,
+            schema={"price": pl.Float64, "quantity": pl.Int64},
+        )
+    )
     validator = value_validator().set_output(transform="polars")
     result = validator.fit_transform(frame)
     assert isinstance(result, pl.DataFrame)

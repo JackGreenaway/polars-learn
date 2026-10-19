@@ -2,9 +2,15 @@
 
 ## Why preparation belongs with the model
 
-A prediction endpoint should accept the raw observations the fitted pipeline expects. When feature logic lives in a separate helper, training and serving callers must remember to invoke the same helper in the same order. `FeatureEngineer` makes those expressions part of the pipeline: training fits the preparation contract and prediction reuses it before the model executes. Keeping schema checks, feature construction, and selection together makes changes reviewable and model artifacts easier to operate.
+A prediction endpoint should accept the raw observations the fitted pipeline expects. If Python owns inference, putting the input contract, feature construction, and model-input selection in that same pipeline makes the model's data requirements inspectable and executable in one place. Separate helpers or services can work, but then training and serving must coordinate their versions and prove the full combination still agrees. The complete fitted pipeline can be evaluated, cross-validated, and deployed as one object, while each estimator's `fit` learns state without mutating the caller's frame; prediction-time transformations run when the pipeline transforms the input.
 
 This is a practical building block for production workflows, not a guarantee of application correctness or a performance benchmark. Your data contracts, model tests, monitoring, and deployment process remain part of the system.
+
+## When preparation runs outside the model pipeline
+
+A Kafka Streams topology, Spark job, or separate ingestion service can perform feature engineering and validation before sending rows to a model. That can be the right architecture for stateful streaming, shared features, data ownership boundaries, or a measured throughput need, but the model still has to run inference on the prepared rows. For deterministic row-wise transformations, benchmark the full prediction path before adding Kafka or Spark solely for presumed speed: Polars is designed for fast columnar work, and a separate stage adds its own latency and operational costs. External preparation also separates the model artifact from the raw-data requirements: the fitted model usually sees only prepared columns, so saving it alone does not carry the source schema, feature definitions, or validation rules that produced them. Independently versioned producer and model releases can drift while preserving the same column names and dtypes, and offline validation may miss a mismatch between the two.
+
+When external preparation is the right boundary, treat it and the model as one versioned input contract. Keep the prepared schema and feature semantics explicit, validate them at the model boundary, test representative raw records through the whole path, and roll out compatible producer and model versions together. Avoid maintaining duplicate definitions of the same feature. When one fitted artifact should accept raw rows and apply preparation itself, put supported preparation steps in the scikit-learn pipeline and save the complete fitted pipeline.
 
 ## Establish a clear input contract
 
@@ -12,9 +18,7 @@ Use `SchemaSpec` for an externally declared contract or `SchemaValidator` for a 
 
 A schema validates names and dtypes, not business meaning. Add `ValueValidator` after the structural contract to enforce required non-null values, numeric bounds, allowed categories, and other row-level rules with named Polars Boolean expressions. False and null check results raise `ValueValidationError`. A permissive cast may lose information even when it succeeds; use strict or semi-strict policies where that tradeoff is unacceptable.
 
-For a training-defined contract, strict mode rejects an unexpected dtype with a
-typed package error. `ValueValidator` then checks row-level rules before the
-model sees the batch:
+For a training-defined contract, strict mode rejects an unexpected dtype with a typed package error. `ValueValidator` then checks row-level rules before the model sees the batch:
 
 ```python
 import polars as pl
@@ -52,9 +56,7 @@ else:
     raise AssertionError("Invalid row value was accepted")
 ```
 
-Use application checks for rules that need external state, cross-row aggregation,
-or custom remediation. `ValueValidator` covers row-wise conditions that can be
-expressed as Polars Boolean expressions.
+Use application checks for rules that need external state, cross-row aggregation, or custom remediation. `ValueValidator` covers row-wise conditions that can be expressed as Polars Boolean expressions.
 
 ## Keep prediction behavior stable
 
